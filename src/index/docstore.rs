@@ -1,13 +1,10 @@
 //! Document Store implementation
 //!
 //! Provides document storage and retrieval.
-//! Supports both Rust-native format and Python RAG format for cross-compatibility.
 
 use crate::loader::Document;
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -92,88 +89,12 @@ impl Docstore {
     }
 
     /// Load store from file
-    ///
-    /// Supports both Rust-native format and Python RAG format.
-    /// Python format has: { "documents": { "id": { "id", "metadata", "text" } } }
-    /// Rust format has: { "documents": { "id": Document } }
     pub fn load_from_file(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read docstore from {:?}", path))?;
 
-        // First, try to parse as JSON Value to detect format
-        let json_value: Value = serde_json::from_str(&content)
-            .with_context(|| "Failed to parse docstore as JSON")?;
-
-        // Check if this is Python RAG format (has "documents" key with nested structure)
-        if let Some(docs_obj) = json_value.get("documents").and_then(|v| v.as_object()) {
-            // Check the first document to detect format
-            if let Some((_, first_doc)) = docs_obj.iter().next() {
-                // Python format has metadata.date as ISO string
-                if first_doc.get("metadata").and_then(|m| m.get("date")).is_some() {
-                    tracing::info!("Detected Python RAG docstore format, converting...");
-                    return Self::load_from_python_format(&content);
-                }
-            }
-        }
-
-        // Rust native format
         let store = serde_json::from_str(&content)
-            .with_context(|| "Failed to parse docstore as Rust format")?;
-        Ok(store)
-    }
-
-    /// Load from Python RAG format and convert to Rust format
-    fn load_from_python_format(content: &str) -> Result<Self> {
-        #[derive(Debug, Deserialize)]
-        struct PythonDocstore {
-            documents: HashMap<String, PythonDocument>,
-        }
-
-        #[derive(Debug, Deserialize)]
-        struct PythonDocument {
-            id: String,
-            metadata: PythonMetadata,
-            text: String,
-        }
-
-        #[derive(Debug, Deserialize)]
-        struct PythonMetadata {
-            title: String,
-            date: String,
-            tags: Vec<String>,
-        }
-
-        let python_store: PythonDocstore = serde_json::from_str(content)
-            .with_context(|| "Failed to parse Python docstore format")?;
-
-        let mut store = Self::new();
-
-        for (id, py_doc) in python_store.documents {
-            // Parse date string to DateTime<Utc>
-            let date = DateTime::parse_from_rfc3339(&py_doc.metadata.date)
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or_else(|_| {
-                    // Try alternative formats
-                    chrono::NaiveDateTime::parse_from_str(&py_doc.metadata.date, "%Y-%m-%d %H:%M:%S")
-                        .map(|ndt| ndt.and_utc())
-                        .unwrap_or_else(|_| Utc::now())
-                });
-
-            let doc = Document::with_id(
-                id,
-                py_doc.metadata.title,
-                date,
-                py_doc.metadata.tags,
-                py_doc.text,
-            );
-            store.add(doc);
-        }
-
-        tracing::info!(
-            "Converted Python docstore format: {} documents",
-            store.len()
-        );
-
+            .with_context(|| "Failed to parse docstore")?;
         Ok(store)
     }
 
