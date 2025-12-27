@@ -4,6 +4,8 @@
 
 mod changelog;
 mod document;
+mod jsonl;
 
 pub use changelog::ChangelogLoader;
 pub use document::{Document, Metadata};
+pub use jsonl::JsonlLoader;

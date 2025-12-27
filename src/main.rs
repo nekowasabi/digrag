@@ -11,6 +11,7 @@ use rmcp::{
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::io::{stdin, stdout};
@@ -375,8 +376,47 @@ async fn main() -> Result<()> {
                 return Err(anyhow::anyhow!("At least one --input is required"));
             }
 
-            let resolved_inputs: Vec<String> = input.iter().map(|i| resolve_path(i)).collect();
             let resolved_output = resolve_path(&output);
+
+            // Check if reading from stdin (single "-" input)
+            let is_stdin = input.len() == 1 && input[0] == "-";
+
+            if is_stdin {
+                // Read JSONL from stdin
+                eprintln!("Reading JSONL documents from stdin...");
+                let stdin_handle = io::stdin();
+                let documents = digrag::loader::JsonlLoader::load_from_reader(stdin_handle.lock())?;
+                eprintln!("Loaded {} documents from stdin", documents.len());
+
+                if with_embeddings {
+                    let api_key = std::env::var("OPENROUTER_API_KEY")
+                        .map_err(|_| anyhow::anyhow!("OPENROUTER_API_KEY environment variable not set"))?;
+                    let builder = IndexBuilder::with_embeddings(api_key);
+                    builder.build_from_documents_with_embeddings(
+                        documents,
+                        Path::new(&resolved_output),
+                        |step, total, msg| {
+                            eprintln!("[{}/{}] {}", step, total, msg);
+                        },
+                    ).await?;
+                } else {
+                    let builder = IndexBuilder::new();
+                    builder.build_from_documents_with_progress(
+                        documents,
+                        Path::new(&resolved_output),
+                        |step, total, msg| {
+                            eprintln!("[{}/{}] {}", step, total, msg);
+                        },
+                        1,
+                    )?;
+                }
+
+                eprintln!("\nIndex build complete!");
+                return Ok(());
+            }
+
+            // File-based input processing
+            let resolved_inputs: Vec<String> = input.iter().map(|i| resolve_path(i)).collect();
 
             // ディレクトリをファイルリストに展開
             let mut expanded_inputs: Vec<String> = Vec::new();
