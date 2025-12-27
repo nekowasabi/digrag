@@ -11,10 +11,11 @@ use rmcp::{
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::io::{stdin, stdout};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use walkdir::WalkDir;
 
 // ============================================================================
 // Path Resolution Helper
@@ -25,6 +26,24 @@ fn resolve_path(path: &str) -> String {
     path_resolver::resolve_path(path)
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| path.to_string())
+}
+
+/// ディレクトリから.mdファイルを再帰的に収集（node_modules, .git等を除外）
+fn collect_markdown_files(dir: &Path) -> Vec<PathBuf> {
+    WalkDir::new(dir)
+        .follow_links(true)
+        .into_iter()
+        .filter_entry(|e| {
+            let name = e.file_name().to_string_lossy();
+            // node_modules, .git, target などを除外
+            !matches!(name.as_ref(), "node_modules" | ".git" | "target" | ".rag")
+        })
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path().is_file() && e.path().extension().is_some_and(|ext| ext == "md")
+        })
+        .map(|e| e.path().to_path_buf())
+        .collect()
 }
 
 // ============================================================================
@@ -358,6 +377,22 @@ async fn main() -> Result<()> {
 
             let resolved_inputs: Vec<String> = input.iter().map(|i| resolve_path(i)).collect();
             let resolved_output = resolve_path(&output);
+
+            // ディレクトリをファイルリストに展開
+            let mut expanded_inputs: Vec<String> = Vec::new();
+            for input_path_str in &resolved_inputs {
+                let path = Path::new(input_path_str);
+                if path.is_dir() {
+                    let md_files = collect_markdown_files(path);
+                    eprintln!("  Found {} markdown files in directory: {}", md_files.len(), input_path_str);
+                    for md_file in md_files {
+                        expanded_inputs.push(md_file.to_string_lossy().to_string());
+                    }
+                } else {
+                    expanded_inputs.push(input_path_str.clone());
+                }
+            }
+            let resolved_inputs = expanded_inputs;
 
             eprintln!("Building indices from {} input(s) to {}", resolved_inputs.len(), resolved_output);
             for (i, path) in resolved_inputs.iter().enumerate() {
