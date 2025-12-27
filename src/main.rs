@@ -201,6 +201,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Initialize digrag configuration
+    Init {
+        /// Force overwrite existing configuration
+        #[arg(short, long)]
+        force: bool,
+    },
     /// Start the MCP server
     Serve {
         /// Path to the index directory (default: .rag)
@@ -266,6 +272,37 @@ async fn main() -> Result<()> {
         .init();
 
     match cli.command {
+        Commands::Init { force } => {
+            let config_dir = path_resolver::get_config_dir();
+            let config_path = config_dir.join("config.toml");
+            
+            eprintln!("Initializing digrag configuration...");
+            eprintln!("Config directory: {}", config_dir.display());
+            
+            // Create config directory
+            if !config_dir.exists() {
+                std::fs::create_dir_all(&config_dir)?;
+                eprintln!("Created config directory");
+            }
+            
+            // Check if config already exists
+            if config_path.exists() && !force {
+                eprintln!("Configuration file already exists: {}", config_path.display());
+                eprintln!("Use --force to overwrite");
+                return Ok(());
+            }
+            
+            // Create default config
+            let default_config = AppConfig::default();
+            let toml_content = default_config.to_toml()?;
+            std::fs::write(&config_path, &toml_content)?;
+            
+            eprintln!("Created configuration file: {}", config_path.display());
+            eprintln!("\nConfiguration initialized successfully!");
+            eprintln!("Edit {} to customize settings.", config_path.display());
+            
+            Ok(())
+        }
         Commands::Serve { index_dir } => {
             let resolved_index_dir = resolve_path(&index_dir);
             tracing::info!("Starting MCP server with index directory: {}", resolved_index_dir);
