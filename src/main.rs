@@ -4,7 +4,7 @@ use anyhow::Result;
 use digrag::config::{SearchConfig, SearchMode, path_resolver, app_config::AppConfig};
 use digrag::index::IndexBuilder;
 use digrag::search::Searcher;
-use clap::{Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand};
 use rmcp::{
     model::{CallToolResult, Content, ServerCapabilities, ServerInfo},
     schemars, tool, ServerHandler, ServiceExt,
@@ -215,9 +215,9 @@ enum Commands {
     },
     /// Build search indices from changelog file
     Build {
-        /// Path to the changelog file
-        #[arg(short, long)]
-        input: String,
+        /// Path to the changelog file(s) or directory(s) - can be specified multiple times
+        #[arg(short, long, action = ArgAction::Append)]
+        input: Vec<String>,
 
         /// Path to the output index directory
         #[arg(short, long, default_value = ".rag")]
@@ -326,9 +326,17 @@ async fn main() -> Result<()> {
             skip_embeddings: _,
             with_embeddings,
         } => {
-            let resolved_input = resolve_path(&input);
+            if input.is_empty() {
+                return Err(anyhow::anyhow!("At least one --input is required"));
+            }
+
+            let resolved_inputs: Vec<String> = input.iter().map(|i| resolve_path(i)).collect();
             let resolved_output = resolve_path(&output);
-            eprintln!("Building indices from {} to {}", resolved_input, resolved_output);
+
+            eprintln!("Building indices from {} input(s) to {}", resolved_inputs.len(), resolved_output);
+            for (i, path) in resolved_inputs.iter().enumerate() {
+                eprintln!("  Input {}: {}", i + 1, path);
+            }
 
             if with_embeddings {
                 // Get API key from environment
@@ -338,25 +346,35 @@ async fn main() -> Result<()> {
                 eprintln!("Embedding generation enabled (using OpenRouter API)");
 
                 let builder = IndexBuilder::with_embeddings(api_key);
-                builder.build_with_embeddings(
-                    Path::new(&resolved_input),
-                    Path::new(&resolved_output),
-                    |step, total, msg| {
-                        eprintln!("[{}/{}] {}", step, total, msg);
-                    },
-                ).await?;
+
+                // Process each input
+                for (idx, resolved_input) in resolved_inputs.iter().enumerate() {
+                    eprintln!("\nProcessing input {}/{}: {}", idx + 1, resolved_inputs.len(), resolved_input);
+                    builder.build_with_embeddings(
+                        Path::new(resolved_input),
+                        Path::new(&resolved_output),
+                        |step, total, msg| {
+                            eprintln!("[{}/{}] {}", step, total, msg);
+                        },
+                    ).await?;
+                }
             } else {
                 let builder = IndexBuilder::new();
-                builder.build_with_progress(
-                    Path::new(&resolved_input),
-                    Path::new(&resolved_output),
-                    |step, total, msg| {
-                        eprintln!("[{}/{}] {}", step, total, msg);
-                    },
-                )?;
+
+                // Process each input
+                for (idx, resolved_input) in resolved_inputs.iter().enumerate() {
+                    eprintln!("\nProcessing input {}/{}: {}", idx + 1, resolved_inputs.len(), resolved_input);
+                    builder.build_with_progress(
+                        Path::new(resolved_input),
+                        Path::new(&resolved_output),
+                        |step, total, msg| {
+                            eprintln!("[{}/{}] {}", step, total, msg);
+                        },
+                    )?;
+                }
             }
 
-            eprintln!("Index build complete!");
+            eprintln!("\nIndex build complete!");
             Ok(())
         }
         Commands::Search {
@@ -428,6 +446,28 @@ mod tests {
             ".rag",
         ]);
         assert!(cli.is_ok());
+    }
+
+    #[test]
+    fn test_cli_build_command_multiple_inputs() {
+        let cli = Cli::try_parse_from([
+            "digrag",
+            "build",
+            "--input",
+            "changelogmemo",
+            "--input",
+            "archive/old_changelogmemo",
+            "--output",
+            ".rag",
+        ]);
+        assert!(cli.is_ok());
+        if let Ok(parsed) = cli {
+            if let Commands::Build { input, .. } = parsed.command {
+                assert_eq!(input.len(), 2);
+                assert_eq!(input[0], "changelogmemo");
+                assert_eq!(input[1], "archive/old_changelogmemo");
+            }
+        }
     }
 
     #[test]
