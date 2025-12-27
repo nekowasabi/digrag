@@ -4,5 +4,6 @@
 
 mod search_config;
 pub mod path_resolver;
+pub mod app_config;
 
 pub use search_config::{SearchConfig, SearchMode};
