@@ -1,7 +1,7 @@
 //! digrag: Command-line interface for the changelog search MCP server
 
 use anyhow::Result;
-use digrag::config::{SearchConfig, SearchMode};
+use digrag::config::{SearchConfig, SearchMode, path_resolver, app_config::AppConfig};
 use digrag::index::IndexBuilder;
 use digrag::search::Searcher;
 use clap::{Parser, Subcommand};
@@ -20,21 +20,11 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 // Path Resolution Helper
 // ============================================================================
 
-/// Resolve a path relative to the project root
-/// If the path exists as-is, use it. Otherwise, try digrag/ prefix
+/// Resolve a path using the path_resolver module
 fn resolve_path(path: &str) -> String {
-    let p = std::path::Path::new(path);
-    if p.exists() {
-        path.to_string()
-    } else {
-        let prefixed = format!("digrag/{}", path);
-        if std::path::Path::new(&prefixed).exists() {
-            prefixed
-        } else {
-            // Return original path if neither exists (will fail with clear error later)
-            path.to_string()
-        }
-    }
+    path_resolver::resolve_path(path)
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| path.to_string())
 }
 
 // ============================================================================
