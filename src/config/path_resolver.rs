@@ -11,13 +11,13 @@ use std::path::{Path, PathBuf};
 
 /// Expand tilde (~) in path to home directory
 pub fn expand_home(path: &str) -> Result<PathBuf> {
-    if path.starts_with('~') {
+    if let Some(stripped) = path.strip_prefix('~') {
         let home = std::env::var("HOME")
             .map_err(|_| anyhow!("HOME environment variable not set"))?;
-        if path == "~" {
+        if stripped.is_empty() {
             Ok(PathBuf::from(home))
-        } else if path.starts_with("~/") {
-            Ok(PathBuf::from(format!("{}{}", home, &path[1..])))
+        } else if stripped.starts_with('/') {
+            Ok(PathBuf::from(format!("{}{}", home, stripped)))
         } else {
             // ~username format not supported, return as-is
             Ok(PathBuf::from(path))
