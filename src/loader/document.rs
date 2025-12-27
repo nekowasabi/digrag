@@ -72,12 +72,127 @@ impl Document {
     pub fn has_tag(&self, tag: &str) -> bool {
         self.metadata.tags.iter().any(|t| t == tag)
     }
+
+    /// Get the category from the title
+    ///
+    /// Extracts the first part of a hierarchical title separated by " / ".
+    /// For example, "Claude Code / hookタイミング" returns "Claude Code".
+    ///
+    /// # Returns
+    /// - `Some(&str)` with the category if title is non-empty
+    /// - `None` if the title is empty
+    pub fn category(&self) -> Option<&str> {
+        let title = self.title();
+        if title.is_empty() {
+            None
+        } else {
+            Some(title.split(" / ").next().unwrap_or(title))
+        }
+    }
+
+    /// Get the subcategory from the title
+    ///
+    /// Extracts the second part of a hierarchical title separated by " / ".
+    /// For example, "Claude Code / hookタイミング" returns "hookタイミング".
+    ///
+    /// # Returns
+    /// - `Some(&str)` with the subcategory if title has hierarchy
+    /// - `None` if title has no " / " separator or is empty
+    pub fn subcategory(&self) -> Option<&str> {
+        let parts: Vec<&str> = self.title().split(" / ").collect();
+        if parts.len() > 1 {
+            Some(parts[1])
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::TimeZone;
+
+    // Process 2: TDD Tests for category/subcategory
+
+    #[test]
+    fn test_category_with_hierarchy() {
+        let date = Utc.with_ymd_and_hms(2025, 1, 15, 10, 0, 0).unwrap();
+        let doc = Document::new(
+            "Claude Code / hookタイミング".to_string(),
+            date,
+            vec![],
+            "Content".to_string(),
+        );
+
+        assert_eq!(doc.category(), Some("Claude Code"));
+    }
+
+    #[test]
+    fn test_category_without_hierarchy() {
+        let date = Utc.with_ymd_and_hms(2025, 1, 15, 10, 0, 0).unwrap();
+        let doc = Document::new(
+            "単一カテゴリ".to_string(),
+            date,
+            vec![],
+            "Content".to_string(),
+        );
+
+        assert_eq!(doc.category(), Some("単一カテゴリ"));
+    }
+
+    #[test]
+    fn test_category_empty_title() {
+        let date = Utc.with_ymd_and_hms(2025, 1, 15, 10, 0, 0).unwrap();
+        let doc = Document::new(
+            "".to_string(),
+            date,
+            vec![],
+            "Content".to_string(),
+        );
+
+        assert_eq!(doc.category(), None);
+    }
+
+    #[test]
+    fn test_subcategory_with_hierarchy() {
+        let date = Utc.with_ymd_and_hms(2025, 1, 15, 10, 0, 0).unwrap();
+        let doc = Document::new(
+            "Claude Code / hookタイミング".to_string(),
+            date,
+            vec![],
+            "Content".to_string(),
+        );
+
+        assert_eq!(doc.subcategory(), Some("hookタイミング"));
+    }
+
+    #[test]
+    fn test_subcategory_without_hierarchy() {
+        let date = Utc.with_ymd_and_hms(2025, 1, 15, 10, 0, 0).unwrap();
+        let doc = Document::new(
+            "単一カテゴリ".to_string(),
+            date,
+            vec![],
+            "Content".to_string(),
+        );
+
+        assert_eq!(doc.subcategory(), None);
+    }
+
+    #[test]
+    fn test_subcategory_multiple_levels() {
+        let date = Utc.with_ymd_and_hms(2025, 1, 15, 10, 0, 0).unwrap();
+        let doc = Document::new(
+            "カテゴリ / サブカテゴリ / 詳細".to_string(),
+            date,
+            vec![],
+            "Content".to_string(),
+        );
+
+        // 最初のスラッシュで分割、サブカテゴリは2番目の部分
+        assert_eq!(doc.subcategory(), Some("サブカテゴリ"));
+    }
 
     #[test]
     fn test_document_creation() {
