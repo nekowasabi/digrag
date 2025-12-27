@@ -199,6 +199,32 @@ struct Cli {
     command: Commands,
 }
 
+/// Load application configuration from config file
+fn load_app_config() -> AppConfig {
+    let config_path = path_resolver::get_default_config_path();
+
+    // Start with environment variables
+    let env_config = AppConfig::from_env();
+
+    // Try to load from file and merge
+    if config_path.exists() {
+        match AppConfig::from_file(&config_path) {
+            Ok(file_config) => {
+                tracing::debug!("Loaded config from {}", config_path.display());
+                // File config is base, env config overrides
+                file_config.merge_with(&env_config)
+            }
+            Err(e) => {
+                tracing::warn!("Failed to load config file: {}", e);
+                env_config
+            }
+        }
+    } else {
+        tracing::debug!("No config file found at {}", config_path.display());
+        env_config
+    }
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// Initialize digrag configuration
@@ -237,16 +263,16 @@ enum Commands {
         query: String,
 
         /// Path to the index directory
-        #[arg(short, long, default_value = ".rag")]
-        index_dir: String,
+        #[arg(short, long)]
+        index_dir: Option<String>,
 
         /// Number of results to return
-        #[arg(short, long, default_value = "10")]
-        top_k: usize,
+        #[arg(short, long)]
+        top_k: Option<usize>,
 
         /// Search mode: bm25, semantic, or hybrid
-        #[arg(short, long, default_value = "bm25")]
-        mode: String,
+        #[arg(short, long)]
+        mode: Option<String>,
 
         /// Filter by tag
         #[arg(long)]
@@ -384,21 +410,40 @@ async fn main() -> Result<()> {
             mode,
             tag,
         } => {
-            let resolved_index_dir = resolve_path(&index_dir);
-            let search_mode = match mode.as_str() {
+            // Load config and apply CLI overrides
+            let app_config = load_app_config();
+
+            let resolved_index_dir = resolve_path(
+                &index_dir.unwrap_or_else(|| app_config.index_dir().to_string())
+            );
+            let effective_top_k = top_k.unwrap_or_else(|| app_config.default_top_k());
+            let effective_mode = mode.unwrap_or_else(|| app_config.default_search_mode().to_string());
+
+            let search_mode = match effective_mode.as_str() {
                 "bm25" => SearchMode::Bm25,
                 "semantic" => SearchMode::Semantic,
                 "hybrid" => SearchMode::Hybrid,
                 _ => {
-                    eprintln!("Unknown mode '{}', using bm25", mode);
+                    eprintln!("Unknown mode '{}', using bm25", effective_mode);
                     SearchMode::Bm25
                 }
             };
 
-            let searcher = Searcher::new(&resolved_index_dir)?;
+            // Create searcher with embedding client if API key is available
+            let searcher = if let Some(api_key) = app_config.openrouter_api_key() {
+                tracing::info!("Using OpenRouter API key from config for semantic search");
+                let embedding_client = digrag::embedding::OpenRouterEmbedding::new(api_key);
+                Searcher::with_embedding_client(&resolved_index_dir, embedding_client)?
+            } else if let Ok(api_key) = std::env::var("OPENROUTER_API_KEY") {
+                tracing::info!("Using OPENROUTER_API_KEY env var for semantic search");
+                let embedding_client = digrag::embedding::OpenRouterEmbedding::new(api_key);
+                Searcher::with_embedding_client(&resolved_index_dir, embedding_client)?
+            } else {
+                Searcher::new(&resolved_index_dir)?
+            };
             let config = SearchConfig::new()
                 .with_mode(search_mode)
-                .with_top_k(top_k)
+                .with_top_k(effective_top_k)
                 .with_tag_filter(tag);
 
             let results = searcher.search(&query, &config)?;
