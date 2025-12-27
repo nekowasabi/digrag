@@ -1,50 +1,234 @@
-# cl-search: Rust-based Changelog Search Engine
+# digrag: Portable Text RAG Search Engine
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/Rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
 
-High-performance search engine for changelog memos, implemented in Rust with support for BM25 keyword search, semantic vector search, and hybrid search via MCP (Model Context Protocol).
+[日本語版](README_ja.md)
+
+A high-performance, portable RAG (Retrieval-Augmented Generation) search engine for any text files. Search your notes, memos, documents, and other text content using BM25 keyword search, semantic vector search, or hybrid search. Seamlessly integrates with Claude via MCP (Model Context Protocol).
 
 ## Features
 
-- **Fast Search**: BM25 keyword-based search (~30 µs per query)
+- **Japanese Support**: Full Japanese text tokenization with Lindera IPADIC
+- **MCP Integration**: Expose search functionality to Claude Code and Claude Desktop
+- **Fast Search**: BM25 keyword-based search (~30 microseconds per query)
 - **Semantic Search**: Vector-based semantic search with OpenRouter embeddings
 - **Hybrid Search**: Combines BM25 and semantic results using Reciprocal Rank Fusion
-- **Japanese Support**: Full Japanese text tokenization with Lindera IPADIC
-- **MCP Integration**: Expose search functionality to Claude and other AI assistants
 - **Portable Binary**: Single self-contained binary (~70MB) for macOS, Linux, Windows
-- **Python Compatible**: 100% compatible with existing Python RAG indices
 - **Query Rewriting**: LLM-based query optimization with caching
 
-## Quick Start
+## Installation
+
+### Binary Download
+
+Download the latest binary from [GitHub Releases](https://github.com/takets/digrag/releases):
+
+| Platform | Download |
+|----------|----------|
+| macOS (Apple Silicon) | `digrag-aarch64-apple-darwin.tar.gz` |
+| macOS (Intel) | `digrag-x86_64-apple-darwin.tar.gz` |
+| Linux (x86_64) | `digrag-x86_64-unknown-linux-gnu.tar.gz` |
+| Windows (x86_64) | `digrag-x86_64-pc-windows-msvc.zip` |
+
+```bash
+# Example: macOS Apple Silicon
+curl -LO https://github.com/takets/digrag/releases/latest/download/digrag-aarch64-apple-darwin.tar.gz
+tar xzf digrag-aarch64-apple-darwin.tar.gz
+sudo mv digrag /usr/local/bin/
+digrag --version
+```
+
+### Using install.sh
+
+```bash
+curl -sSL https://raw.githubusercontent.com/takets/digrag/main/install.sh | bash
+```
+
+### cargo install
+
+If you have Rust 1.70+ installed:
+
+```bash
+cargo install digrag
+```
 
 ### Build from Source
 
 ```bash
-cd cl-search
-cargo build --release
-./target/release/cl-search --help
+git clone https://github.com/takets/digrag.git
+cd digrag
+make build-release
+./target/release/digrag --version
 ```
 
-### Build Indices
+## Quick Start
+
+### 1. Initialize Configuration
 
 ```bash
-# Create indices from changelogmemo file
-./target/release/cl-search build --changelog ../changelogmemo --output ../.rag
+digrag init
 ```
 
-### Search
+This creates a configuration file at `~/.config/digrag/config.toml` (Linux/macOS) or `%APPDATA%\digrag\config.toml` (Windows).
+
+### 2. Build Index
+
+```bash
+# BM25 only (fast, no API key required)
+digrag build --input ~/notes --output ~/.digrag/index
+
+# With semantic embeddings (requires OPENROUTER_API_KEY)
+export OPENROUTER_API_KEY="sk-or-v1-..."
+digrag build --input ~/notes --output ~/.digrag/index --with-embeddings
+```
+
+### 3. Search
 
 ```bash
 # BM25 search
-./target/release/cl-search search --index-dir ../.rag --query "メモ" --mode bm25
+digrag search "meeting notes" --index-dir ~/.digrag/index
 
-# Hybrid search (default)
-./target/release/cl-search search --index-dir ../.rag --query "メモ"
+# Hybrid search
+digrag search "project ideas" --index-dir ~/.digrag/index --mode hybrid
 
 # Semantic search
-OPENROUTER_API_KEY=your-key ./target/release/cl-search search --index-dir ../.rag --query "メモ" --mode semantic
+digrag search "similar concepts" --index-dir ~/.digrag/index --mode semantic
 ```
+
+## MCP Setup
+
+### Claude Code
+
+Add to your MCP configuration (`.mcp.json` or settings):
+
+```json
+{
+  "mcpServers": {
+    "digrag": {
+      "command": "digrag",
+      "args": ["serve", "--index-dir", "~/.digrag/index"],
+      "env": {
+        "OPENROUTER_API_KEY": "sk-or-v1-..."
+      }
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Add to `~/.claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "digrag": {
+      "command": "/usr/local/bin/digrag",
+      "args": ["serve", "--index-dir", "/Users/yourname/.digrag/index"],
+      "env": {
+        "OPENROUTER_API_KEY": "sk-or-v1-..."
+      }
+    }
+  }
+}
+```
+
+### Available MCP Tools
+
+Once configured, Claude can use these tools:
+
+| Tool | Description |
+|------|-------------|
+| `query_memos` | Search documents using BM25, semantic, or hybrid mode |
+| `list_tags` | List all available tags with document counts |
+| `get_recent_memos` | Get the most recently modified documents |
+
+### Initial Setup Steps
+
+```bash
+# 1. Initialize configuration
+digrag init
+
+# 2. Build your index
+digrag build --input ~/Documents/notes --output ~/.digrag/index --with-embeddings
+
+# 3. Test the server manually (optional)
+digrag serve --index-dir ~/.digrag/index
+
+# 4. Configure Claude Code or Claude Desktop (see above)
+```
+
+## Command Reference
+
+### init
+
+Initialize digrag configuration file.
+
+```bash
+digrag init [OPTIONS]
+```
+
+| Option | Short | Description | Default |
+|--------|-------|-------------|---------|
+| `--force` | `-f` | Overwrite existing configuration | `false` |
+
+### serve
+
+Start the MCP server (communicates via stdin/stdout).
+
+```bash
+digrag serve [OPTIONS]
+```
+
+| Option | Short | Description | Default |
+|--------|-------|-------------|---------|
+| `--index-dir` | `-i` | Path to index directory | `.rag` |
+
+### build
+
+Build search indices from text files.
+
+```bash
+digrag build --input <PATH> [OPTIONS]
+```
+
+| Option | Short | Description | Default |
+|--------|-------|-------------|---------|
+| `--input` | `-i` | Source file or directory (required) | - |
+| `--output` | `-o` | Output index directory | `.rag` |
+| `--with-embeddings` | - | Generate embeddings (requires `OPENROUTER_API_KEY`) | `false` |
+| `--skip-embeddings` | - | Skip embedding generation (BM25 only) | `false` |
+
+### search
+
+Search the index from command line (for testing).
+
+```bash
+digrag search <QUERY> [OPTIONS]
+```
+
+| Option | Short | Description | Default |
+|--------|-------|-------------|---------|
+| `<query>` | - | Search query (required) | - |
+| `--index-dir` | `-i` | Path to index directory | `.rag` |
+| `--top-k` | `-k` | Number of results to return | `10` |
+| `--mode` | `-m` | Search mode: `bm25`, `semantic`, `hybrid` | `bm25` |
+| `--tag` | `-t` | Filter results by tag | - |
+
+### Global Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--verbose` | `-v` | Enable verbose logging |
+| `--help` | `-h` | Show help information |
+| `--version` | `-V` | Show version |
+
+## Use Cases
+
+- **Personal Note Search**: Search through your markdown notes, journals, and memos
+- **Documentation Search**: Index and search project documentation, wikis, or knowledge bases
+- **Learning Materials**: Organize and search study notes, research papers, and references
+- **Code Documentation**: Search through code comments, READMEs, and technical documents
 
 ## Development
 
@@ -63,9 +247,9 @@ cargo bench
 ```
 
 Results:
-- BM25 search: ~30 µs per query
+- BM25 search: ~30 microseconds per query
 - Semantic search: ~3 ns (vector lookup)
-- Hybrid search: ~34 µs per query
+- Hybrid search: ~34 microseconds per query
 
 ### Code Quality
 
@@ -77,7 +261,7 @@ cargo clippy -- -D warnings
 ## Project Structure
 
 ```
-cl-search/
+digrag/
 ├── src/
 │   ├── lib.rs                 # Library exports
 │   ├── main.rs                # CLI binary
@@ -97,12 +281,6 @@ cl-search/
 └── README.md                  # This file
 ```
 
-## Documentation
-
-- [API Reference](../docs/API.md) - Complete API documentation
-- [Migration Guide](../docs/MIGRATION.md) - Migrating from Python
-- [Main README](../README.md) - Project overview
-
 ## License
 
-MIT License - see LICENSE file for details
+MIT License - see [LICENSE](LICENSE) file for details.
