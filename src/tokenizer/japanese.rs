@@ -20,9 +20,14 @@ const TARGET_POS: &[&str] = &["名詞", "動詞", "形容詞", "副詞"];
 /// POS detail categories to exclude
 const EXCLUDE_POS_DETAIL: &[&str] = &["非自立", "接尾", "数"];
 
-/// Compiled regex for extracting English tokens (alphabetic sequences)
+/// Compiled regex for extracting English tokens (alphanumeric sequences starting with letter)
 static ENGLISH_TOKEN_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[A-Za-z]+").expect("Invalid regex"));
+    Lazy::new(|| Regex::new(r"[A-Za-z][A-Za-z0-9]*").expect("Invalid regex"));
+
+/// Compiled regex for extracting pure numeric sequences
+static NUMERIC_TOKEN_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\d+").expect("Invalid regex"));
+
 
 /// Japanese text tokenizer using Lindera
 pub struct JapaneseTokenizer {
@@ -106,18 +111,85 @@ impl JapaneseTokenizer {
         texts.iter().map(|t| self.tokenize(t)).collect()
     }
 
+    /// Split CamelCase tokens into parts
+    ///
+    /// Examples:
+    /// - "VimConf" -> ["Vim", "Conf"]
+    /// - "VimConf2025" -> ["Vim", "Conf", "2025"]
+    /// - "myVariable" -> ["my", "Variable"]
+    fn split_camel_case(&self, token: &str) -> Vec<String> {
+        let mut parts = Vec::new();
+        let mut current = String::new();
+        let mut prev_upper = false;
+        let mut prev_digit = false;
+
+        for ch in token.chars() {
+            let is_upper = ch.is_uppercase();
+            let is_digit = ch.is_ascii_digit();
+
+            // Start new part on transitions
+            if !current.is_empty() {
+                // lowercase -> uppercase (e.g., "myV" -> "my" + "V")
+                // letter -> digit (e.g., "Conf2" -> "Conf" + "2")
+                // digit -> letter (e.g., "2025V" -> "2025" + "V")
+                let should_split = (!prev_upper && is_upper)
+                    || (!prev_digit && is_digit)
+                    || (prev_digit && !is_digit);
+
+                if should_split {
+                    parts.push(current);
+                    current = String::new();
+                }
+            }
+
+            current.push(ch);
+            prev_upper = is_upper;
+            prev_digit = is_digit;
+        }
+
+        if !current.is_empty() {
+            parts.push(current);
+        }
+
+        parts
+    }
+
     /// Extract English tokens from text using regex
     ///
-    /// Extracts alphabetic sequences and normalizes to uppercase.
+    /// Extracts alphanumeric sequences (starting with letter) and normalizes to uppercase.
+    /// Also splits CamelCase tokens and extracts numeric sequences.
     /// Useful for finding acronyms like MCP, API, LLM in mixed text.
     pub fn extract_english_tokens(&self, text: &str) -> Vec<String> {
         let mut seen = HashSet::new();
         let mut tokens = Vec::new();
 
+        // Extract alphanumeric tokens starting with letter
         for cap in ENGLISH_TOKEN_REGEX.find_iter(text) {
-            let token = cap.as_str().to_uppercase();
-            if seen.insert(token.clone()) {
-                tokens.push(token);
+            let original = cap.as_str();
+            let upper = original.to_uppercase();
+
+            // Add the full token
+            if seen.insert(upper.clone()) {
+                tokens.push(upper);
+            }
+
+            // Split CamelCase and add parts
+            let parts = self.split_camel_case(original);
+            if parts.len() > 1 {
+                for part in parts {
+                    let upper_part = part.to_uppercase();
+                    if seen.insert(upper_part.clone()) {
+                        tokens.push(upper_part);
+                    }
+                }
+            }
+        }
+
+        // Extract pure numeric sequences
+        for cap in NUMERIC_TOKEN_REGEX.find_iter(text) {
+            let num = cap.as_str().to_string();
+            if seen.insert(num.clone()) {
+                tokens.push(num);
             }
         }
 
@@ -288,8 +360,10 @@ mod tests {
     fn test_extract_english_tokens_mixed_case() {
         let tokenizer = JapaneseTokenizer::new().unwrap();
         let tokens = tokenizer.extract_english_tokens("McpServer");
-        // Should extract as uppercase
-        assert_eq!(tokens, vec!["MCPSERVER"]);
+        // Should extract as uppercase with CamelCase split
+        assert!(tokens.contains(&"MCPSERVER".to_string()));
+        assert!(tokens.contains(&"MCP".to_string())); // CamelCase split
+        assert!(tokens.contains(&"SERVER".to_string())); // CamelCase split
     }
 
     #[test]

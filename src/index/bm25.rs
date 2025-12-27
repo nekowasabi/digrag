@@ -76,8 +76,9 @@ impl Bm25Index {
         let mut total_length = 0usize;
 
         for (doc_idx, doc) in docs.iter().enumerate() {
-            // Tokenize document content with English token extraction
-            let tokens = tokenizer.tokenize_with_english(&doc.text)?;
+            // Tokenize document content AND title with English token extraction
+            let combined_text = format!("{} {}", doc.title(), doc.text);
+            let tokens = tokenizer.tokenize_with_english(&combined_text)?;
             let doc_len = tokens.len();
 
             index.doc_ids.push(doc.id.clone());
@@ -495,6 +496,119 @@ mod tests {
         assert!(
             results.iter().any(|r| r.doc_id == "doc2"),
             "Should find doc2 containing Python"
+        );
+    }
+
+    // ============================================
+    // TDD Process 2: Title in BM25 Index Tests
+    // ============================================
+
+    #[test]
+    fn test_bm25_search_by_title_only_keyword() {
+        // Create a document where the keyword ONLY exists in the title
+        let docs = vec![Document::with_id(
+            "vimconf_doc".to_string(),
+            "VimConf2025参加レポート".to_string(), // keyword in title
+            Utc::now(),
+            vec!["event".to_string()],
+            "カンファレンスに参加しました。素晴らしい体験でした。".to_string(), // no keyword in body
+        )];
+        let index = Bm25Index::build(&docs).unwrap();
+
+        // Search for "VimConf" which only exists in title
+        let results = index.search("VimConf", 3).unwrap();
+        assert!(
+            !results.is_empty(),
+            "Should find document by title keyword 'VimConf'"
+        );
+        assert!(
+            results.iter().any(|r| r.doc_id == "vimconf_doc"),
+            "Should find the vimconf_doc"
+        );
+    }
+
+    // ============================================
+    // TDD Process 3: English Tokens with Numbers
+    // ============================================
+
+    #[test]
+    fn test_bm25_search_alphanumeric_keyword() {
+        let docs = vec![Document::with_id(
+            "vimconf2025_doc".to_string(),
+            "イベントレポート".to_string(),
+            Utc::now(),
+            vec!["event".to_string()],
+            "vimconf2025に参加した。".to_string(), // keyword with numbers
+        )];
+        let index = Bm25Index::build(&docs).unwrap();
+
+        // Search for "vimconf2025" with numbers
+        let results = index.search("vimconf2025", 3).unwrap();
+        assert!(
+            !results.is_empty(),
+            "Should find document with alphanumeric keyword 'vimconf2025'"
+        );
+    }
+
+    #[test]
+    fn test_bm25_search_year_number() {
+        let docs = vec![Document::with_id(
+            "year_doc".to_string(),
+            "2025年の予定".to_string(),
+            Utc::now(),
+            vec!["plan".to_string()],
+            "vimconf2025とrubykaigi2025に参加予定。".to_string(),
+        )];
+        let index = Bm25Index::build(&docs).unwrap();
+
+        // Search for "2025" should work
+        let results = index.search("2025", 3).unwrap();
+        // This should find the document if numbers are tokenized
+        assert!(
+            !results.is_empty(),
+            "Should find document containing '2025'"
+        );
+    }
+
+    // ============================================
+    // TDD Process 4: CamelCase Splitting
+    // ============================================
+
+    #[test]
+    fn test_bm25_search_camelcase_partial() {
+        let docs = vec![Document::with_id(
+            "camel_doc".to_string(),
+            "VimConf参加".to_string(),
+            Utc::now(),
+            vec!["event".to_string()],
+            "VimConfは素晴らしいイベントです。".to_string(),
+        )];
+        let index = Bm25Index::build(&docs).unwrap();
+
+        // Search for "Vim" should find "VimConf" via CamelCase splitting
+        let results = index.search("Vim", 3).unwrap();
+        assert!(
+            !results.is_empty(),
+            "Should find document with 'Vim' from 'VimConf' via CamelCase split"
+        );
+    }
+
+    #[test]
+    fn test_bm25_search_camelcase_second_part() {
+        let docs = vec![Document::with_id(
+            "camel_doc2".to_string(),
+            "VimConf参加".to_string(),
+            Utc::now(),
+            vec!["event".to_string()],
+            "VimConfは素晴らしいイベントです。".to_string(),
+        )];
+        let index = Bm25Index::build(&docs).unwrap();
+
+        // Search for "Conf" should find "VimConf" via CamelCase splitting
+        let results = index.search("Conf", 3).unwrap();
+        assert!(
+            !results.is_empty(),
+            "Should find document with 'Conf' from 'VimConf' via CamelCase split"
         );
     }
 }
