@@ -106,7 +106,7 @@ MCP 設定（`.mcp.json` または設定画面）に追加:
   "mcpServers": {
     "digrag": {
       "command": "digrag",
-      "args": ["serve", "--index-dir", "~/.digrag/index"],
+g "args": ["serve", "--index-dir", "~/.digrag/index"],
       "env": {
         "OPENROUTER_API_KEY": "sk-or-v1-..."
       }
