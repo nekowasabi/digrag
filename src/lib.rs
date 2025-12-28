@@ -25,6 +25,7 @@
 
 pub mod config;
 pub mod embedding;
+pub mod extract;
 pub mod index;
 pub mod loader;
 // pub mod mcp;  // MCP server is now implemented in main.rs using rmcp macros
