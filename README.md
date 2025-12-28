@@ -198,6 +198,8 @@ digrag build --input <PATH> [OPTIONS]
 | `--output` | `-o` | Output index directory | `.rag` |
 | `--with-embeddings` | - | Generate embeddings (requires `OPENROUTER_API_KEY`) | `false` |
 | `--skip-embeddings` | - | Skip embedding generation (BM25 only) | `false` |
+| `--incremental` | - | Use incremental build (only process changed documents) | `false` |
+| `--force` | - | Force full rebuild even with `--incremental` | `false` |
 
 ### search
 
@@ -222,6 +224,46 @@ digrag search <QUERY> [OPTIONS]
 | `--verbose` | `-v` | Enable verbose logging |
 | `--help` | `-h` | Show help information |
 | `--version` | `-V` | Show version |
+
+## Incremental Build
+
+The incremental build feature significantly reduces embedding API costs by only processing documents that have changed since the last build.
+
+### How It Works
+
+1. **Content Hashing**: Each document gets a unique ID based on SHA256 hash of its title and content
+2. **Change Detection**: When rebuilding, digrag compares new documents against stored hashes
+3. **Selective Processing**: Only added/modified documents get new embeddings generated
+4. **Automatic Cleanup**: Removed documents are automatically deleted from the index
+
+### Usage
+
+```bash
+# Initial build (full)
+digrag build --input ~/notes --output ~/.digrag/index --with-embeddings
+
+# Subsequent builds (incremental - only processes changes)
+digrag build --input ~/notes --output ~/.digrag/index --with-embeddings --incremental
+
+# Force full rebuild if needed
+digrag build --input ~/notes --output ~/.digrag/index --with-embeddings --incremental --force
+```
+
+### Output Example
+
+```
+Using incremental build mode
+Loaded 640 documents total
+
+Incremental build summary:
+  Added: 5 documents
+  Modified: 2 documents
+  Removed: 1 documents
+  Unchanged: 632 documents
+  Embeddings needed: 7
+```
+
+In this example, only 7 documents need new embeddings instead of all 640, reducing API costs by ~99%.
 
 ## Use Cases
 

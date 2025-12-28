@@ -4,6 +4,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 /// Document metadata
@@ -51,6 +52,44 @@ impl Document {
             metadata: Metadata { title, date, tags },
             text,
         }
+    }
+
+    /// Compute content hash from title and text
+    ///
+    /// Uses SHA256 hash of "title\0text" and returns first 16 hex characters.
+    /// This ensures reproducible document IDs based on content only.
+    pub fn compute_content_hash(title: &str, text: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(title.as_bytes());
+        hasher.update(b"\0");
+        hasher.update(text.as_bytes());
+        let result = hasher.finalize();
+        hex::encode(&result[..8]) // First 8 bytes = 16 hex chars
+    }
+
+    /// Create a document with content-based ID
+    ///
+    /// The document ID is computed from the content hash of title and text,
+    /// making it reproducible across builds.
+    pub fn with_content_id(
+        title: String,
+        date: DateTime<Utc>,
+        tags: Vec<String>,
+        text: String,
+    ) -> Self {
+        let id = Self::compute_content_hash(&title, &text);
+        Self {
+            id,
+            metadata: Metadata { title, date, tags },
+            text,
+        }
+    }
+
+    /// Get the content hash of this document
+    ///
+    /// Returns hash based on title and text only (metadata excluded).
+    pub fn content_hash(&self) -> String {
+        Self::compute_content_hash(&self.metadata.title, &self.text)
     }
 
     /// Get the document title

@@ -98,6 +98,18 @@ impl Docstore {
         Ok(store)
     }
 
+    /// Remove a document by ID
+    pub fn remove(&mut self, doc_id: &str) {
+        self.documents.remove(doc_id);
+    }
+
+    /// Remove multiple documents by ID
+    pub fn remove_batch(&mut self, doc_ids: &[String]) {
+        for doc_id in doc_ids {
+            self.documents.remove(doc_id);
+        }
+    }
+
     /// Get document count
     pub fn len(&self) -> usize {
         self.documents.len()

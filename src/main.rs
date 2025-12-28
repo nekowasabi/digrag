@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use digrag::config::{SearchConfig, SearchMode, path_resolver, app_config::AppConfig};
-use digrag::index::IndexBuilder;
+use digrag::index::{IndexBuilder, IncrementalDiff};
 use digrag::search::Searcher;
 use clap::{ArgAction, Parser, Subcommand};
 use rmcp::{
@@ -276,6 +276,14 @@ enum Commands {
         /// Generate embeddings for semantic search (requires OPENROUTER_API_KEY)
         #[arg(long)]
         with_embeddings: bool,
+
+        /// Use incremental build (only process changed documents)
+        #[arg(long)]
+        incremental: bool,
+
+        /// Force full rebuild even with --incremental
+        #[arg(long)]
+        force: bool,
     },
     /// Search the changelog (for testing)
     Search {
@@ -371,12 +379,26 @@ async fn main() -> Result<()> {
             output,
             skip_embeddings: _,
             with_embeddings,
+            incremental,
+            force,
         } => {
             if input.is_empty() {
                 return Err(anyhow::anyhow!("At least one --input is required"));
             }
 
             let resolved_output = resolve_path(&output);
+            let output_path = Path::new(&resolved_output);
+
+            // Determine build mode
+            let use_incremental = incremental && !force && IndexBuilder::has_incremental_support(output_path);
+
+            if incremental && force {
+                eprintln!("Force full rebuild requested (--force overrides --incremental)");
+            } else if incremental && !IndexBuilder::has_incremental_support(output_path) {
+                eprintln!("Incremental build not available (no existing index or old schema), using full build");
+            } else if use_incremental {
+                eprintln!("Using incremental build mode");
+            }
 
             // Check if reading from stdin (single "-" input)
             let is_stdin = input.len() == 1 && input[0] == "-";
@@ -387,6 +409,24 @@ async fn main() -> Result<()> {
                 let stdin_handle = io::stdin();
                 let documents = digrag::loader::JsonlLoader::load_from_reader(stdin_handle.lock())?;
                 eprintln!("Loaded {} documents from stdin", documents.len());
+
+                // If incremental mode, compute and display diff
+                if use_incremental {
+                    if let Some(existing_metadata) = IndexBuilder::load_existing_metadata(output_path) {
+                        let diff = IncrementalDiff::compute(documents.clone(), &existing_metadata.doc_hashes);
+                        eprintln!("\nIncremental build summary:");
+                        eprintln!("  Added: {} documents", diff.added_count());
+                        eprintln!("  Modified: {} documents", diff.modified_count());
+                        eprintln!("  Removed: {} documents", diff.removed_count());
+                        eprintln!("  Unchanged: {} documents", diff.unchanged_count());
+                        eprintln!("  Embeddings needed: {}", diff.embeddings_needed());
+
+                        if !diff.has_changes() {
+                            eprintln!("\nNo changes detected, skipping rebuild.");
+                            return Ok(());
+                        }
+                    }
+                }
 
                 if with_embeddings {
                     let api_key = std::env::var("OPENROUTER_API_KEY")
@@ -439,6 +479,34 @@ async fn main() -> Result<()> {
                 eprintln!("  Input {}: {}", i + 1, path);
             }
 
+            // Load all documents from all inputs first
+            let loader = digrag::loader::ChangelogLoader::new();
+            let mut all_documents = Vec::new();
+            for resolved_input in &resolved_inputs {
+                eprintln!("Loading documents from: {}", resolved_input);
+                let docs = loader.load_from_file(Path::new(resolved_input))?;
+                all_documents.extend(docs);
+            }
+            eprintln!("Loaded {} documents total", all_documents.len());
+
+            // If incremental mode, compute and display diff
+            if use_incremental {
+                if let Some(existing_metadata) = IndexBuilder::load_existing_metadata(output_path) {
+                    let diff = IncrementalDiff::compute(all_documents.clone(), &existing_metadata.doc_hashes);
+                    eprintln!("\nIncremental build summary:");
+                    eprintln!("  Added: {} documents", diff.added_count());
+                    eprintln!("  Modified: {} documents", diff.modified_count());
+                    eprintln!("  Removed: {} documents", diff.removed_count());
+                    eprintln!("  Unchanged: {} documents", diff.unchanged_count());
+                    eprintln!("  Embeddings needed: {}", diff.embeddings_needed());
+
+                    if !diff.has_changes() {
+                        eprintln!("\nNo changes detected, skipping rebuild.");
+                        return Ok(());
+                    }
+                }
+            }
+
             if with_embeddings {
                 // Get API key from environment
                 let api_key = std::env::var("OPENROUTER_API_KEY")
@@ -447,32 +515,23 @@ async fn main() -> Result<()> {
                 eprintln!("Embedding generation enabled (using OpenRouter API)");
 
                 let builder = IndexBuilder::with_embeddings(api_key);
-
-                // Process each input
-                for (idx, resolved_input) in resolved_inputs.iter().enumerate() {
-                    eprintln!("\nProcessing input {}/{}: {}", idx + 1, resolved_inputs.len(), resolved_input);
-                    builder.build_with_embeddings(
-                        Path::new(resolved_input),
-                        Path::new(&resolved_output),
-                        |step, total, msg| {
-                            eprintln!("[{}/{}] {}", step, total, msg);
-                        },
-                    ).await?;
-                }
+                builder.build_from_documents_with_embeddings(
+                    all_documents,
+                    output_path,
+                    |step, total, msg| {
+                        eprintln!("[{}/{}] {}", step, total, msg);
+                    },
+                ).await?;
             } else {
                 let builder = IndexBuilder::new();
-
-                // Process each input
-                for (idx, resolved_input) in resolved_inputs.iter().enumerate() {
-                    eprintln!("\nProcessing input {}/{}: {}", idx + 1, resolved_inputs.len(), resolved_input);
-                    builder.build_with_progress(
-                        Path::new(resolved_input),
-                        Path::new(&resolved_output),
-                        |step, total, msg| {
-                            eprintln!("[{}/{}] {}", step, total, msg);
-                        },
-                    )?;
-                }
+                builder.build_from_documents_with_progress(
+                    all_documents,
+                    output_path,
+                    |step, total, msg| {
+                        eprintln!("[{}/{}] {}", step, total, msg);
+                    },
+                    1,
+                )?;
             }
 
             eprintln!("\nIndex build complete!");

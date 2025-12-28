@@ -33,17 +33,24 @@ interface Document {
   text: string;
 }
 
-// Simple UUID v4 generator
-function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
+// Compute content hash from title and text
+// Uses SHA256 hash of "title\0text" and returns first 16 hex characters.
+// This ensures reproducible document IDs based on content only.
+// (Matches Rust implementation in src/loader/document.rs)
+async function computeContentHash(title: string, text: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(title + '\0' + text);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = new Uint8Array(hashBuffer);
+  // First 8 bytes = 16 hex characters
+  const hex = Array.from(hashArray.slice(0, 8))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+  return hex;
 }
 
 // Parse a single entry from lines
-function parseEntry(headerLine: string, contentLines: string[]): Document | null {
+async function parseEntry(headerLine: string, contentLines: string[]): Promise<Document | null> {
   // Pattern: * Title YYYY-MM-DD HH:MM:SS [tags]:
   const headerPattern = /^\* (.+?) (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s*(.*)$/;
   const match = headerLine.match(headerPattern);
@@ -67,11 +74,15 @@ function parseEntry(headerLine: string, contentLines: string[]): Document | null
 
   // Join content lines
   const text = contentLines.join('\n').trim();
+  const trimmedTitle = title.trim();
+
+  // Compute content-based ID (matches Rust implementation)
+  const id = await computeContentHash(trimmedTitle, text);
 
   return {
-    id: generateUUID(),
+    id,
     metadata: {
-      title: title.trim(),
+      title: trimmedTitle,
       date: date.toISOString(),
       tags,
     },
@@ -80,7 +91,7 @@ function parseEntry(headerLine: string, contentLines: string[]): Document | null
 }
 
 // Parse the entire changelog content
-function parseChangelog(content: string): Document[] {
+async function parseChangelog(content: string): Promise<Document[]> {
   const lines = content.split('\n');
   const documents: Document[] = [];
 
@@ -91,7 +102,7 @@ function parseChangelog(content: string): Document[] {
     if (line.startsWith('* ') && /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(line)) {
       // Save previous entry if exists
       if (currentHeader) {
-        const doc = parseEntry(currentHeader, currentContent);
+        const doc = await parseEntry(currentHeader, currentContent);
         if (doc) {
           documents.push(doc);
         }
@@ -108,7 +119,7 @@ function parseChangelog(content: string): Document[] {
 
   // Don't forget the last entry
   if (currentHeader) {
-    const doc = parseEntry(currentHeader, currentContent);
+    const doc = await parseEntry(currentHeader, currentContent);
     if (doc) {
       documents.push(doc);
     }
@@ -146,7 +157,7 @@ async function main() {
   }
 
   // Parse and output
-  const documents = parseChangelog(content);
+  const documents = await parseChangelog(content);
 
   // Output as JSONL to stdout
   for (const doc of documents) {

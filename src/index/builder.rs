@@ -2,11 +2,10 @@
 //!
 //! Provides the pipeline for building all indices from changelog files.
 
-use super::{Bm25Index, Docstore, VectorIndex};
+use super::{Bm25Index, Docstore, IndexMetadata, VectorIndex};
 use crate::embedding::OpenRouterEmbedding;
 use crate::loader::{ChangelogLoader, Document};
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Create embedding input text from a document
@@ -32,17 +31,6 @@ fn create_embedding_text(doc: &Document) -> String {
     } else {
         format!("# {}\nタグ: {}\n\n{}", title, tags, doc.text)
     }
-}
-
-/// Index metadata
-#[derive(Debug, Serialize, Deserialize)]
-pub struct IndexMetadata {
-    /// Number of documents
-    pub doc_count: usize,
-    /// Index creation timestamp
-    pub created_at: String,
-    /// Model used for embeddings
-    pub embedding_model: Option<String>,
 }
 
 /// Index builder for creating all search indices
@@ -82,6 +70,32 @@ impl IndexBuilder {
     /// Check if this builder has an embedding client configured
     pub fn has_embedding_client(&self) -> bool {
         self.embedding_client.is_some()
+    }
+
+    /// Load existing metadata from output directory
+    ///
+    /// Returns None if metadata doesn't exist or requires full rebuild
+    pub fn load_existing_metadata(output_dir: &Path) -> Option<IndexMetadata> {
+        let metadata_path = output_dir.join("metadata.json");
+        if !metadata_path.exists() {
+            return None;
+        }
+
+        match IndexMetadata::load_from_file(&metadata_path) {
+            Ok(metadata) => {
+                if metadata.needs_full_rebuild() {
+                    None
+                } else {
+                    Some(metadata)
+                }
+            }
+            Err(_) => None,
+        }
+    }
+
+    /// Check if the output directory supports incremental builds
+    pub fn has_incremental_support(output_dir: &Path) -> bool {
+        Self::load_existing_metadata(output_dir).is_some()
     }
 
     /// Build all indices from a changelog file (sync version, no embeddings)
@@ -141,17 +155,16 @@ impl IndexBuilder {
         let vector_index = VectorIndex::new(0);
         vector_index.save_to_file(&output_dir.join("faiss_index.json"))?;
 
-        // Save metadata
-        let metadata = IndexMetadata {
-            doc_count,
-            created_at: chrono::Utc::now().to_rfc3339(),
-            embedding_model: self
-                .embedding_client
-                .as_ref()
-                .map(|c| c.model().to_string()),
-        };
-        let metadata_json = serde_json::to_string_pretty(&metadata)?;
-        std::fs::write(output_dir.join("metadata.json"), metadata_json)?;
+        // Save metadata with doc hashes
+        let embedding_model = self
+            .embedding_client
+            .as_ref()
+            .map(|c| c.model().to_string());
+        let mut metadata = IndexMetadata::new(doc_count, embedding_model);
+        for doc in &documents {
+            metadata.update_doc_hash(doc.id.clone(), doc.content_hash());
+        }
+        metadata.save_to_file(&output_dir.join("metadata.json"))?;
 
         progress(total_steps, total_steps, "Done!");
 
@@ -232,16 +245,16 @@ impl IndexBuilder {
         docstore.save_to_file(&output_dir.join("docstore.json"))?;
         vector_index.save_to_file(&output_dir.join("faiss_index.json"))?;
 
-        let metadata = IndexMetadata {
-            doc_count,
-            created_at: chrono::Utc::now().to_rfc3339(),
-            embedding_model: self
-                .embedding_client
-                .as_ref()
-                .map(|c| c.model().to_string()),
-        };
-        let metadata_json = serde_json::to_string_pretty(&metadata)?;
-        std::fs::write(output_dir.join("metadata.json"), metadata_json)?;
+        // Save metadata with doc hashes for incremental builds
+        let embedding_model = self
+            .embedding_client
+            .as_ref()
+            .map(|c| c.model().to_string());
+        let mut metadata = IndexMetadata::new(doc_count, embedding_model);
+        for doc in &documents {
+            metadata.update_doc_hash(doc.id.clone(), doc.content_hash());
+        }
+        metadata.save_to_file(&output_dir.join("metadata.json"))?;
 
         progress(5, 5, "Done!");
 
@@ -327,17 +340,16 @@ impl IndexBuilder {
         docstore.save_to_file(&output_dir.join("docstore.json"))?;
         vector_index.save_to_file(&output_dir.join("faiss_index.json"))?;
 
-        // Save metadata
-        let metadata = IndexMetadata {
-            doc_count,
-            created_at: chrono::Utc::now().to_rfc3339(),
-            embedding_model: self
-                .embedding_client
-                .as_ref()
-                .map(|c| c.model().to_string()),
-        };
-        let metadata_json = serde_json::to_string_pretty(&metadata)?;
-        std::fs::write(output_dir.join("metadata.json"), metadata_json)?;
+        // Save metadata with doc hashes for incremental builds
+        let embedding_model = self
+            .embedding_client
+            .as_ref()
+            .map(|c| c.model().to_string());
+        let mut metadata = IndexMetadata::new(doc_count, embedding_model);
+        for doc in &documents {
+            metadata.update_doc_hash(doc.id.clone(), doc.content_hash());
+        }
+        metadata.save_to_file(&output_dir.join("metadata.json"))?;
 
         progress(6, 6, "Done!");
 

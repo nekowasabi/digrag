@@ -1,13 +1,13 @@
 ---
-mission_id: null
+mission_id: "6958f5a5-fe79-4413-adf4-56e26cb3b2d8"
 title: "Incremental Build with Content Hashing"
-status: planning
-progress: 0
-phase: planning
+status: completed
+progress: 100
+phase: completed
 tdd_mode: true
 blockers: 0
-created_at: ""
-updated_at: ""
+created_at: "2025-12-28"
+updated_at: "2025-12-28"
 ---
 
 # Commander's Intent
@@ -82,17 +82,17 @@ updated_at: ""
 
 | Process | Status | Progress | Phase | Notes |
 |---------|--------|----------|-------|-------|
-| Process 1 | planning | ▯▯▯▯▯ 0% | Red | コンテンツハッシュ機能の実装 |
-| Process 2 | planning | ▯▯▯▯▯ 0% | Red | IncrementalDiff の実装 |
-| Process 3 | planning | ▯▯▯▯▯ 0% | Red | IndexMetadata の拡張 |
-| Process 4 | planning | ▯▯▯▯▯ 0% | Red | Docstore/VectorIndex の削除機能 |
-| Process 5 | planning | ▯▯▯▯▯ 0% | Red | IndexBuilder のインクリメンタル対応 |
-| Process 6 | planning | ▯▯▯▯▯ 0% | Red | CLI オプション追加 |
-| Process 10 | planning | ▯▯▯▯▯ 0% | Red | 統合テスト作成 |
-| Process 200 | planning | ▯▯▯▯▯ 0% | Red | ドキュメンテーション |
-| Process 300 | planning | ▯▯▯▯▯ 0% | Red | OODAフィードバックループ |
+| Process 1 | completed | ▮▮▮▮▮ 100% | Done | コンテンツハッシュ機能の実装 |
+| Process 2 | completed | ▮▮▮▮▮ 100% | Done | IncrementalDiff の実装 |
+| Process 3 | completed | ▮▮▮▮▮ 100% | Done | IndexMetadata の拡張 |
+| Process 4 | completed | ▮▮▮▮▮ 100% | Done | Docstore/VectorIndex の削除機能 |
+| Process 5 | completed | ▮▮▮▮▮ 100% | Done | IndexBuilder のインクリメンタル対応 |
+| Process 6 | completed | ▮▮▮▮▮ 100% | Done | CLI オプション追加 |
+| Process 10 | completed | ▮▮▮▮▮ 100% | Done | 統合テスト作成 |
+| Process 200 | completed | ▮▮▮▮▮ 100% | Done | ドキュメンテーション |
+| Process 300 | skipped | - | - | OODAフィードバックループ（別途実施） |
 | | | | | |
-| **Overall** | **planning** | **▯▯▯▯▯ 0%** | **planning** | **Blockers: 0** |
+| **Overall** | **completed** | **▮▮▮▮▮ 100%** | **Done** | **All tests passing** |
 
 ---
 

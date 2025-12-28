@@ -106,6 +106,26 @@ impl VectorIndex {
         Ok(index)
     }
 
+    /// Check if a document exists in the index
+    pub fn contains(&self, doc_id: &str) -> bool {
+        self.doc_ids.iter().any(|id| id == doc_id)
+    }
+
+    /// Remove a document by ID
+    pub fn remove(&mut self, doc_id: &str) {
+        if let Some(idx) = self.doc_ids.iter().position(|id| id == doc_id) {
+            self.doc_ids.remove(idx);
+            self.vectors.remove(idx);
+        }
+    }
+
+    /// Remove multiple documents by ID
+    pub fn remove_batch(&mut self, doc_ids: &[String]) {
+        for doc_id in doc_ids {
+            self.remove(doc_id);
+        }
+    }
+
     /// Get document count
     pub fn len(&self) -> usize {
         self.doc_ids.len()

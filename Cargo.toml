@@ -63,6 +63,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # UUID for document IDs
 uuid = { version = "1.11", features = ["v4"] }
+
+# Content hashing for incremental builds
+sha2 = "0.10"
+hex = "0.4"
 once_cell = "1.21.3"
 
 # Configuration file support
