@@ -50,7 +50,7 @@ impl ChangelogEntryExtractor {
         let mut current_start: Option<usize> = None;
         let mut current_header: Option<&str> = None;
 
-        for (_idx, line) in text.lines().enumerate() {
+        for line in text.lines() {
             if ENTRY_PATTERN.is_match(line) {
                 // Found new entry header
                 if let Some(start_offset) = current_start {

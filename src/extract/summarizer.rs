@@ -6,7 +6,9 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tracing::{debug, info, warn};
 
+use super::openrouter_client::{ChatCompletionOptions, ChatMessage, OpenRouterClient};
 use super::{ContentStats, ExtractedContent};
 
 /// OpenRouter provider configuration
@@ -116,25 +118,40 @@ pub struct Summary {
     pub method: String,
     /// Content statistics
     pub stats: ContentStats,
+    /// Token usage (if LLM was used)
+    pub usage: Option<SummaryUsage>,
+}
+
+/// Usage statistics for LLM summarization
+#[derive(Debug, Clone)]
+pub struct SummaryUsage {
+    pub prompt_tokens: usize,
+    pub completion_tokens: usize,
+    pub total_tokens: usize,
+    pub model: String,
 }
 
 /// Content summarizer
 pub struct ContentSummarizer {
     strategy: SummarizationStrategy,
-    api_key: Option<String>,
+    client: Option<OpenRouterClient>,
 }
 
 impl ContentSummarizer {
     /// Create a new content summarizer
     pub fn new(strategy: SummarizationStrategy, api_key: Option<String>) -> Self {
-        Self { strategy, api_key }
+        let client = api_key.as_ref().map(|key| OpenRouterClient::new(key.clone()));
+        Self {
+            strategy,
+            client,
+        }
     }
 
     /// Create a rule-based summarizer
     pub fn rule_based(preview_chars: usize) -> Self {
         Self {
             strategy: SummarizationStrategy::RuleBased { preview_chars },
-            api_key: None,
+            client: None,
         }
     }
 
@@ -146,6 +163,7 @@ impl ContentSummarizer {
         provider_config: ProviderConfig,
         api_key: String,
     ) -> Self {
+        let client = OpenRouterClient::new(api_key);
         Self {
             strategy: SummarizationStrategy::LlmBased {
                 model,
@@ -153,8 +171,36 @@ impl ContentSummarizer {
                 temperature,
                 provider_config,
             },
-            api_key: Some(api_key),
+            client: Some(client),
         }
+    }
+
+    /// Create summarizer from AppConfig
+    pub fn from_config(config: &crate::config::app_config::AppConfig) -> Self {
+        if config.summarization_enabled() {
+            if let Some(api_key) = config.openrouter_api_key() {
+                let provider_config = ProviderConfig {
+                    order: config.provider_order(),
+                    allow_fallbacks: config.provider_allow_fallbacks(),
+                    only: config.provider_only(),
+                    ignore: config.provider_ignore(),
+                    sort: config.provider_sort(),
+                    require_parameters: config.provider_require_parameters(),
+                };
+
+                return Self::llm_based(
+                    config.summarization_model().to_string(),
+                    config.summarization_max_tokens(),
+                    config.summarization_temperature(),
+                    provider_config,
+                    api_key,
+                );
+            } else {
+                warn!("Summarization enabled but no API key configured, falling back to rule-based");
+            }
+        }
+
+        Self::rule_based(200)
     }
 
     /// Generate summary (async for LLM, sync-compatible for rule-based)
@@ -169,26 +215,35 @@ impl ContentSummarizer {
                 temperature,
                 provider_config,
             } => {
-                if let Some(ref api_key) = self.api_key {
+                if let Some(ref client) = self.client {
+                    let start = std::time::Instant::now();
                     match self
                         .llm_summary(
+                            client,
                             content,
                             model,
                             *max_tokens,
                             *temperature,
                             provider_config,
-                            api_key,
                         )
                         .await
                     {
-                        Ok(summary) => summary,
-                        Err(_) => {
-                            // Fallback to rule-based on error
+                        Ok(summary) => {
+                            let elapsed = start.elapsed();
+                            info!(
+                                model = %model,
+                                duration_ms = %elapsed.as_millis(),
+                                "LLM summarization completed"
+                            );
+                            summary
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "LLM summarization failed, falling back to rule-based");
                             self.rule_based_summary(content, 200)
                         }
                     }
                 } else {
-                    // No API key, use rule-based
+                    debug!("No API client configured, using rule-based summary");
                     self.rule_based_summary(content, 200)
                 }
             }
@@ -201,10 +256,9 @@ impl ContentSummarizer {
         let truncated = content.text.chars().count() > preview_chars;
 
         let summary_text = if truncated {
-            format!("{}...\n[{} chars, {} lines]",
-                preview,
-                content.stats.total_chars,
-                content.stats.total_lines
+            format!(
+                "{}...\n[{} chars, {} lines]",
+                preview, content.stats.total_chars, content.stats.total_lines
             )
         } else {
             preview
@@ -214,57 +268,50 @@ impl ContentSummarizer {
             text: summary_text,
             method: "rule-based".to_string(),
             stats: content.stats.clone(),
+            usage: None,
         }
     }
 
     /// Generate LLM-based summary via OpenRouter
     async fn llm_summary(
         &self,
+        client: &OpenRouterClient,
         content: &ExtractedContent,
         model: &str,
         max_tokens: usize,
         temperature: f32,
         provider_config: &ProviderConfig,
-        api_key: &str,
     ) -> Result<Summary, Box<dyn std::error::Error + Send + Sync>> {
-        let client = reqwest::Client::new();
+        let system_prompt = "以下のテキストを簡潔に要約してください。重要なポイントを箇条書きで抽出してください。";
 
-        let request_body = json!({
-            "model": model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "以下のテキストを簡潔に要約してください。重要なポイントを箇条書きで抽出してください。"
-                },
-                {
-                    "role": "user",
-                    "content": content.text
-                }
-            ],
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "provider": provider_config.to_json()
+        let messages = vec![
+            ChatMessage::system(system_prompt),
+            ChatMessage::user(&content.text),
+        ];
+
+        let options = ChatCompletionOptions {
+            max_tokens: Some(max_tokens),
+            temperature: Some(temperature),
+            top_p: None,
+            provider_config: Some(provider_config.clone()),
+        };
+
+        debug!(model = %model, content_len = content.text.len(), "Calling LLM API");
+
+        let response = client.chat_completion(model, messages, options).await?;
+
+        let usage = response.usage.map(|u| SummaryUsage {
+            prompt_tokens: u.prompt_tokens,
+            completion_tokens: u.completion_tokens,
+            total_tokens: u.total_tokens,
+            model: response.model.clone(),
         });
 
-        let response = client
-            .post("https://openrouter.ai/api/v1/chat/completions")
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await?;
-
-        let response_json: serde_json::Value = response.json().await?;
-
-        let summary_text = response_json["choices"][0]["message"]["content"]
-            .as_str()
-            .unwrap_or("Summary generation failed")
-            .to_string();
-
         Ok(Summary {
-            text: summary_text,
+            text: response.content,
             method: "llm".to_string(),
             stats: content.stats.clone(),
+            usage,
         })
     }
 }
@@ -315,6 +362,7 @@ mod tests {
 
         assert_eq!(summary.method, "rule-based");
         assert_eq!(summary.text, "Short content");
+        assert!(summary.usage.is_none());
     }
 
     #[test]
@@ -347,5 +395,17 @@ mod tests {
             }
             _ => panic!("Expected RuleBased strategy"),
         }
+    }
+
+    #[test]
+    fn test_llm_based_factory() {
+        let summarizer = ContentSummarizer::llm_based(
+            "cerebras/llama-3.3-70b".to_string(),
+            500,
+            0.3,
+            ProviderConfig::default(),
+            "test-key".to_string(),
+        );
+        assert!(summarizer.client.is_some());
     }
 }

@@ -5,8 +5,11 @@
 //! - ChangelogEntry: Extract `*`-prefixed changelog entries
 //! - Full: Extract entire content with optional truncation
 
+pub mod cache;
 pub mod changelog;
+pub mod openrouter_client;
 pub mod summarizer;
+pub mod telemetry;
 
 /// Extraction strategy enum
 #[derive(Debug, Clone)]

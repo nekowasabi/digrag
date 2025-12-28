@@ -2,10 +2,13 @@
 //!
 //! Tests for content summarization functionality
 
-use digrag::extract::{ContentStats, ExtractedContent};
+use digrag::extract::openrouter_client::OpenRouterClient;
 use digrag::extract::summarizer::{
-    ContentSummarizer, ProviderConfig, SummarizationStrategy, Summary
+    ContentSummarizer, ProviderConfig, SummarizationStrategy, Summary,
 };
+use digrag::extract::{ContentStats, ExtractedContent};
+use wiremock::matchers::{header, method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 // =============================================================================
 // ProviderConfig Tests
@@ -243,9 +246,109 @@ fn test_summary_struct() {
             total_lines: 5,
             extracted_chars: 50,
         },
+        usage: None,
     };
 
     assert_eq!(summary.text, "Summary text");
     assert_eq!(summary.method, "rule-based");
     assert_eq!(summary.stats.total_chars, 100);
+    assert!(summary.usage.is_none());
+}
+
+// =============================================================================
+// LLM Summarization Integration Tests (with Mock Server)
+// =============================================================================
+
+#[tokio::test]
+async fn test_llm_summarization_with_mock_api() {
+    let mock_server = MockServer::start().await;
+
+    let response_body = serde_json::json!({
+        "id": "gen-123",
+        "model": "cerebras/llama-3.3-70b",
+        "choices": [{
+            "message": {
+                "role": "assistant",
+                "content": "要約:\n- ポイント1\n- ポイント2\n- ポイント3"
+            },
+            "finish_reason": "stop"
+        }],
+        "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 50,
+            "total_tokens": 150
+        }
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/chat/completions"))
+        .and(header("Authorization", "Bearer test-api-key"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(&response_body))
+        .mount(&mock_server)
+        .await;
+
+    // Create client with mock server URL
+    let client = OpenRouterClient::with_config(
+        "test-api-key",
+        Some(mock_server.uri()),
+        None,
+        Some(0),
+    );
+
+    let content = create_test_content("これはテスト用のコンテンツです。要約をテストします。");
+
+    let messages = vec![
+        digrag::extract::openrouter_client::ChatMessage::system(
+            "以下のテキストを簡潔に要約してください。",
+        ),
+        digrag::extract::openrouter_client::ChatMessage::user(&content.text),
+    ];
+
+    let response = client
+        .chat_completion(
+            "cerebras/llama-3.3-70b",
+            messages,
+            digrag::extract::openrouter_client::ChatCompletionOptions::default(),
+        )
+        .await;
+
+    assert!(response.is_ok());
+    let resp = response.unwrap();
+    assert!(resp.content.contains("ポイント"));
+    assert!(resp.usage.is_some());
+    assert_eq!(resp.usage.unwrap().total_tokens, 150);
+}
+
+#[tokio::test]
+async fn test_llm_summarization_fallback_on_error() {
+    let mock_server = MockServer::start().await;
+
+    // Return an error response
+    Mock::given(method("POST"))
+        .and(path("/chat/completions"))
+        .respond_with(ResponseTemplate::new(500).set_body_json(serde_json::json!({
+            "error": {
+                "message": "Internal server error"
+            }
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Create client pointing to mock server (but summarizer won't use it directly)
+    // We test the fallback behavior through the summarizer
+    let summarizer = ContentSummarizer::new(
+        SummarizationStrategy::LlmBased {
+            model: "test-model".to_string(),
+            max_tokens: 100,
+            temperature: 0.3,
+            provider_config: ProviderConfig::default(),
+        },
+        Some("invalid-key".to_string()), // Key exists but API will fail
+    );
+
+    let content = create_test_content("Test content for fallback scenario.");
+    let summary = summarizer.summarize(&content).await;
+
+    // Should fallback to rule-based on API error
+    assert_eq!(summary.method, "rule-based");
 }
