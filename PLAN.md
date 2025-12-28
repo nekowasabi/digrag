@@ -79,8 +79,12 @@ MCPクライアント（Claude等）が、検索結果のコンテンツを適�
 | 5 | ✅ | lib.rsへのモジュール追加 |
 | 6 | ✅ | Searcher統合（searcher.rs） |
 | 7 | ✅ | MCPツール拡張（main.rs） |
+| 8 | 🔲 | OpenRouter HTTPクライアント実装 |
+| 9 | 🔲 | LLM要約API呼び出し実装 |
 | 10 | ✅ | 単体テスト作成 |
 | 11 | ✅ | 統合テスト作成 |
+| 200 | 🔲 | 長期改善: キャッシュ・レート制限・フォールバック |
+| 300 | 🔲 | フィードバック収集: 使用統計・エラー分析 |
 
 ---
 
@@ -380,6 +384,151 @@ Found 2 results for 'Claude Code':
 
 ---
 
+### Process 8: OpenRouter HTTPクライアント実装
+
+**目的:** reqwest と serde_json を使用したOpenRouter API HTTPクライアント基盤の構築
+実装対象: `src/extract/summarizer.rs` 内の `llm_summary()` メソッドの完全実装
+
+#### Red Phase: テスト作成と失敗確認
+- [ ] HTTPクライアント初期化テスト作成（auth header, base URL確認）
+- [ ] OpenRouter APIレスポンス解析テスト作成
+- [ ] エラーハンドリングテスト作成（API failure, timeout, invalid response）
+- [ ] テストを実行して失敗することを確認
+
+✅ **Phase Complete**
+
+#### Green Phase: 最小実装と成功確認
+- [ ] `reqwest::Client` でhttps://openrouter.ai/api/v1/chat/completions へPOSTリクエスト実装
+- [ ] Authorization header に Bearer token 設定
+- [ ] request body のJSON形式化（model, messages, max_tokens, temperature, provider）
+- [ ] レスポンスパース実装（`choices[0].message.content` 抽出）
+- [ ] テストを実行して成功することを確認
+
+✅ **Phase Complete**
+
+#### Refactor Phase: 品質改善と継続成功確認
+- [ ] エラーメッセージの改善（API error vs network error の区別）
+- [ ] retry logic 検討（optional で実装）
+- [ ] テストを実行し、継続して成功することを確認
+
+✅ **Phase Complete**
+
+---
+
+### Process 9: LLM要約API呼び出し実装
+
+**目的:** `src/extract/summarizer.rs` の `llm_based_summary()` 実装完了とE2Eテスト
+
+#### Red Phase: テスト作成と失敗確認
+- [ ] LLM要約呼び出しE2Eテスト作成（mock API使用）
+- [ ] config.toml 反映テスト作成
+- [ ] テストを実行して失敗することを確認
+
+✅ **Phase Complete**
+
+#### Green Phase: 最小実装と成功確認
+- [ ] `llm_summary()` メソッド完全実装
+- [ ] `ProviderConfig.to_json()` の仕様確認と完全性検証
+- [ ] テストを実行して成功することを確認
+
+✅ **Phase Complete**
+
+#### Refactor Phase: 品質改善と継続成功確認
+- [ ] エラー時フォールバック（ルールベース要約へ）の動作確認
+- [ ] ログ追加（API呼び出し情報、応答時間）
+- [ ] テストを実行し、継続して成功することを確認
+
+✅ **Phase Complete**
+
+---
+
+### Process 200: 長期改善 - キャッシュ・レート制限・フォールバック
+
+**目的:** 要約結果のキャッシング、API rate limit対応、provider failover対応
+
+#### Red Phase: 改善戦略設計
+- [ ] キャッシュ戦略の設計（in-memory cache or persistent）
+- [ ] レート制限検出メカニズム設計
+- [ ] フォールバック戦略設計
+- [ ] 設計ドキュメント完成を確認
+
+✅ **Phase Complete**
+
+#### Green Phase: 実装と成功確認
+- [ ] キャッシュ実装（LRU cache 推奨）
+- [ ] レート制限時のリトライ実装
+- [ ] provider failover 実装
+- [ ] テストを実行して成功することを確認
+
+✅ **Phase Complete**
+
+#### Refactor Phase: 品質改善と継続成功確認
+- [ ] パフォーマンス測定
+- [ ] テストを実行し、継続して成功することを確認
+- [ ] ドキュメント更新
+
+✅ **Phase Complete**
+
+---
+
+### Process 300: フィードバック収集 - 使用統計・エラー分析
+
+**目的:** LLM要約の使用統計収集、エラーパターン分析、最適化の教訓保存
+
+#### Red Phase: フィードバック収集設計
+
+**Observe（観察）**
+- [ ] 実装過程で発生した問題・課題を収集
+- [ ] テスト結果から得られた知見を記録
+- [ ] OpenRouter API 利用パターンを分析
+
+**Orient（方向付け）**
+- [ ] 収集した情報をカテゴリ別に分類
+  - Technical: 技術的な知見・パターン（API呼び出しパターン、エラーハンドリング）
+  - Process: プロセス改善に関する教訓（TDDの効果、テスト戦略）
+  - Antipattern: 避けるべきパターン（同期API呼び出し、キャッシュなし）
+  - Best Practice: 推奨パターン（非同期処理、エラーハンドリング戦略）
+- [ ] 重要度（Critical/High/Medium/Low）を設定
+- [ ] 分類完了を確認
+
+✅ **Phase Complete**
+
+#### Green Phase: 教訓・知見の永続化
+
+**Decide（決心）**
+- [ ] 保存すべき教訓・知見を選定
+- [ ] 各項目の保存先を決定
+  - Serena Memory: 組織的な知見（API統合パターン、エラーハンドリング戦略）
+  - stigmergy/lessons: プロジェクト固有の教訓（digrag固有の設定・API使用法）
+  - stigmergy/code-insights: コードパターン・実装知見
+
+**Act（行動）**
+- [ ] serena-v4 の mcp__serena__write_memory で教訓を永続化
+- [ ] コードに関する知見を Markdown で記録
+- [ ] 関連するコード箇所にコメントを追加（必要に応じて）
+- [ ] 永続化完了を確認
+
+✅ **Phase Complete**
+
+#### Refactor Phase: フィードバック品質改善
+
+**Feedback Loop**
+- [ ] 保存した教訓の品質を検証
+  - 再現可能性: 他のプロジェクトで適用可能か
+  - 明確性: 内容が明確で理解しやすいか
+  - 実用性: 実際に役立つ情報か
+- [ ] 重複・矛盾する教訓を統合・整理
+- [ ] メタ学習: OODA プロセス自体の改善点を記録
+
+**Cross-Feedback**
+- [ ] 他の Process（100, 200）との連携を確認
+- [ ] 将来のミッションへの引き継ぎ事項を整理
+- [ ] 検証完了を確認
+
+✅ **Phase Complete**
+
+---
+
 ## Management
 
 ### ブロッカー
@@ -401,6 +550,8 @@ Found 2 results for 'Claude Code':
 - [ ] 全Processの実装完了
 - [ ] 単体テスト作成・パス
 - [ ] 統合テスト作成・パス
+- [ ] OpenRouter API統合完了
+- [ ] E2Eテスト作成・パス
 - [ ] config.toml設定例をREADMEに追記
 - [ ] コミット・PR作成
 
