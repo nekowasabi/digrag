@@ -1,494 +1,406 @@
 ---
-mission_id: "6958f5a5-fe79-4413-adf4-56e26cb3b2d8"
-title: "Incremental Build with Content Hashing"
-status: completed
-progress: 100
-phase: completed
-tdd_mode: true
-blockers: 0
-created_at: "2025-12-28"
-updated_at: "2025-12-28"
+mission_id: content-extraction-feature
+title: ベクター検索後のコンテンツ取得範囲指定機能
+status: planning
+phase: design
+created: 2025-12-28
 ---
 
-# Commander's Intent
+# ベクター検索後のコンテンツ取得範囲指定機能
 
-## Purpose
-- Embedding API コストを削減するため、変更のあるドキュメントのみを処理する
-- digrag build コマンドにインクリメンタルビルド機能を追加し、コンテンツハッシュで差分検出を実現
+## Commander's Intent
 
-## End State
-- `digrag build --incremental` でインクリメンタルビルド実行可能
-- 変更のないドキュメントの Embedding 再生成をスキップ
-- 削除されたドキュメントはインデックスから自動削除
-- 既存インデックスとの後方互換性を保証
+### 目的
+changelogmemoでベクター検索後、`*`ヘッダから始まる記事範囲を抽出し、要約＋生データを返す機能を実装する。
 
-## Key Tasks
-- ドキュメント ID をコンテンツハッシュベースに変更（再現性確保）
-- IncrementalDiff の実装（追加・変更・削除の判定）
-- IndexMetadata にスキーマバージョンとハッシュ情報を追加
-- VectorIndex/Docstore に削除メソッドを実装
-- IndexBuilder でインクリメンタルビルド機能を実装
-- CLI に --incremental フラグを追加
-- 統合テストの作成
+### 完了状態
+- [ ] プロンプトで取得範囲を指定できる（MCPパラメータ + LLM動的判断）
+- [ ] `*`から始まるchangelogエントリ単位で抽出可能
+- [ ] テキスト量が多すぎる場合は自動トランケーション
+- [ ] 要約（ルールベース/LLM選択可能）と生データを両方返却
+- [ ] 設定ファイル（config.toml）で各種パラメータを設定可能
+- [ ] OpenRouterプロバイダーのルーティング設定が可能
 
-## Constraints
-- 既存のドキュメント ID（UUID v4）の生成ロジックは変更して良い（下位互換性不要）
-- スキーマバージョン "1.0" 以前の場合は必ずフルリビルドにフォールバック
-- コンテンツハッシュは title + "\0" + text のみを対象（メタデータは影響させない）
+### 主要タスク
+1. コンテンツ抽出エンジン（`src/extract/`）の新規作成
+2. 設定ファイル拡張（抽出設定 + LLM要約設定 + プロバイダー設定）
+3. MCPツール拡張（パラメータ追加、出力形式変更）
+4. Searcherへの統合
 
-## Restraints
-- すべての変更は TDD（Red → Green → Refactor）で実装
-- テスト完了なしに実装コードをマージしない
-- Embedding API 削減効果を測定可能にする（出力メッセージに件数を含める）
+### 制約
+- 既存のスニペット機能（先頭150文字）との後方互換性を維持
+- デフォルトはルールベース要約（APIコスト節約）
+- LLMモデル・プロバイダーはconfig.tomlでのみ設定（MCP経由での変更不可）
+
+### 必須事項
+- 設定優先順位: MCPパラメータ > 環境変数 > config.toml > デフォルト値
+- OpenRouter形式のモデル指定: `provider/model`（例: `cerebras/llama-3.3-70b`）
+- プロバイダールーティング: `order`, `allow_fallbacks`, `only`等をサポート
 
 ---
 
-# Context
+## Context
 
-## 概要
-- インクリメンタルビルド機能により、再度ビルドする際に変更のあるドキュメントのみ新規 Embedding を生成
-- ユーザーは従来通り `digrag build` を実行するだけで、自動的に差分検出が行われ、効率的にインデックスが更新される
-- Embedding API の呼び出し回数を大幅に削減し、コスト削減と速度向上を実現
+### 概要
+digragはchangelogmemo形式のテキストをRAG検索するCLI/MCPサーバー。現在は検索結果の先頭150文字のみをスニペットとして返却している。本機能では、`*`ヘッダで区切られたエントリ全体を抽出し、要約と生データを組み合わせて返却する。
 
-## 必須のルール
-- 必ず `CLAUDE.md` を参照し、ルールを守ること
-- **TDD（テスト駆動開発）を厳守すること**
-  - 各プロセスは必ずテストファーストで開始する（Red → Green → Refactor）
-  - 実装コードを書く前に、失敗するテストを先に作成する
-  - テストが通過するまで修正とテスト実行を繰り返す
-  - プロセス完了の条件：該当するすべてのテスト、フォーマッタ、Linter が通過していること
+### 必須ルール
+- 後方互換性: `extraction_mode = "snippet"` がデフォルト
+- コスト管理: LLM要約はオプション、デフォルト無効
+- トランケーション: デフォルト5000文字
 
-## 開発のゴール
-- Embedding API コスト削減（変更がないドキュメントの再生成をスキップ）
-- 大規模なドキュメントセット（640+）のビルド時間を短縮
-- ドキュメント追加・更新・削除に対応した柔軟なインデックス管理
+### 開発ゴール
+MCPクライアント（Claude等）が、検索結果のコンテンツを適切な粒度で取得できるようにする。
 
 ---
 
-# References
+## References
 
 | @ref | @target | @test |
 |------|---------|-------|
-| src/loader/document.rs | src/loader/document.rs | tests/test_document_hashing.rs |
-| src/index/builder.rs | src/index/diff.rs | tests/test_incremental_diff.rs |
-| src/index/builder.rs | src/index/builder.rs | tests/test_incremental_build.rs |
-| src/index/vector.rs | src/index/vector.rs | tests/test_vector_index_remove.rs |
-| src/index/docstore.rs | src/index/docstore.rs | tests/test_docstore_remove.rs |
-| src/main.rs | src/main.rs | tests/test_cli_incremental.rs |
+| `src/config/app_config.rs` | 抽出設定・LLM設定・プロバイダー設定追加 | - |
+| `src/extract/mod.rs` | **新規作成** - 抽出エンジン基本構造 | `tests/extract_mod.rs` |
+| `src/extract/changelog.rs` | **新規作成** - changelogエントリ抽出器 | `tests/extract_changelog.rs` |
+| `src/extract/summarizer.rs` | **新規作成** - 要約生成器（ルール/LLM） | `tests/extract_summarizer.rs` |
+| `src/search/searcher.rs` | 抽出器呼び出し統合 | - |
+| `src/main.rs` | MCPパラメータ・出力形式拡張 | - |
+| `src/lib.rs` | extractモジュール追加 | - |
 
 ---
 
-# Progress Map
+## Progress Map
 
-| Process | Status | Progress | Phase | Notes |
-|---------|--------|----------|-------|-------|
-| Process 1 | completed | ▮▮▮▮▮ 100% | Done | コンテンツハッシュ機能の実装 |
-| Process 2 | completed | ▮▮▮▮▮ 100% | Done | IncrementalDiff の実装 |
-| Process 3 | completed | ▮▮▮▮▮ 100% | Done | IndexMetadata の拡張 |
-| Process 4 | completed | ▮▮▮▮▮ 100% | Done | Docstore/VectorIndex の削除機能 |
-| Process 5 | completed | ▮▮▮▮▮ 100% | Done | IndexBuilder のインクリメンタル対応 |
-| Process 6 | completed | ▮▮▮▮▮ 100% | Done | CLI オプション追加 |
-| Process 10 | completed | ▮▮▮▮▮ 100% | Done | 統合テスト作成 |
-| Process 200 | completed | ▮▮▮▮▮ 100% | Done | ドキュメンテーション |
-| Process 300 | skipped | - | - | OODAフィードバックループ（別途実施） |
-| | | | | |
-| **Overall** | **completed** | **▮▮▮▮▮ 100%** | **Done** | **All tests passing** |
+| Process | Status | Description |
+|---------|--------|-------------|
+| 1 | ✅ | 設定ファイル拡張（app_config.rs） |
+| 2 | ✅ | 抽出エンジン基本構造（extract/mod.rs） |
+| 3 | ✅ | changelogエントリ抽出器（extract/changelog.rs） |
+| 4 | ✅ | 要約生成器（extract/summarizer.rs） |
+| 5 | ✅ | lib.rsへのモジュール追加 |
+| 6 | ✅ | Searcher統合（searcher.rs） |
+| 7 | ✅ | MCPツール拡張（main.rs） |
+| 10 | ✅ | 単体テスト作成 |
+| 11 | ✅ | 統合テスト作成 |
 
 ---
 
-# Processes
+## Processes
 
-## Process 1: コンテンツハッシュ機能の実装
+### Process 1: 設定ファイル拡張
 
-### Red Phase: テスト作成と失敗確認
-- [ ] テストファイル `tests/test_document_hashing.rs` を作成
-  - `compute_content_hash("title", "text")` が SHA256[:16] を返すこと
-  - 同じコンテンツは同じハッシュを返すこと（再現性）
-  - 異なるコンテンツは異なるハッシュを返すこと
-  - メタデータ（date, tags）の変更はハッシュに影響しないこと
-- [ ] テストを実行して失敗することを確認
+#### 設計
 
-✅ **Phase Complete**
+**`src/config/app_config.rs` への追加フィールド:**
 
-### Green Phase: 最小実装と成功確認
-- [ ] `Cargo.toml` に依存を追加
-  - `sha2 = "0.10"`
-  - `hex = "0.4"`
-- [ ] `src/loader/document.rs` に `compute_content_hash()` メソッドを実装
-  - 入力: title, text
-  - 処理: SHA256(title + "\0" + text)
-  - 出力: 16文字の hex 文字列
-- [ ] `with_content_id()` コンストラクタを追加（ID生成をコンテンツハッシュ化）
-- [ ] テストを実行して成功することを確認
+```rust
+pub struct AppConfig {
+    // 既存フィールド
+    pub index_dir: String,
+    pub openrouter_api_key: Option<String>,
+    pub default_top_k: usize,
+    pub default_search_mode: String,
 
-✅ **Phase Complete**
+    // 新規: コンテンツ抽出設定
+    pub extraction_mode: String,           // "snippet" | "entry" | "full"
+    pub extraction_max_chars: usize,       // デフォルト: 5000
+    pub extraction_include_summary: bool,  // デフォルト: true
+    pub extraction_include_raw: bool,      // デフォルト: true
 
-### Refactor Phase: 品質改善と継続成功確認
-- [ ] ハッシュ生成ロジックの最適化
-- [ ] ドキュメント構造体のコメントを追加
-- [ ] テストを実行し、継続して成功することを確認
+    // 新規: LLM要約設定
+    pub summarization_enabled: bool,       // デフォルト: false
+    pub summarization_model: String,       // デフォルト: "cerebras/llama-3.3-70b"
+    pub summarization_max_tokens: usize,   // デフォルト: 500
+    pub summarization_temperature: f32,    // デフォルト: 0.3
 
-✅ **Phase Complete**
+    // 新規: OpenRouterプロバイダー設定
+    pub provider_order: Option<Vec<String>>,      // 優先プロバイダー順序
+    pub provider_allow_fallbacks: bool,           // フォールバック許可（デフォルト: true）
+    pub provider_only: Option<Vec<String>>,       // 許可するプロバイダーのみ
+    pub provider_ignore: Option<Vec<String>>,     // 無視するプロバイダー
+    pub provider_sort: Option<String>,            // "price" | "throughput"
+    pub provider_require_parameters: bool,        // パラメータ完全サポート必須
+}
+```
 
----
+**config.toml 設定例:**
 
-## Process 2: IncrementalDiff の実装
+```toml
+# ~/.config/digrag/config.toml
 
-### Red Phase: テスト作成と失敗確認
-- [ ] テストファイル `tests/test_incremental_diff.rs` を作成
-  - 新しいドキュメント → added に分類されること
-  - 既存ドキュメント（コンテンツ変更なし） → unchanged に分類されること
-  - 既存ドキュメント（コンテンツ変更あり） → modified に分類されること
-  - インデックスに存在しない ID → removed に分類されること
-- [ ] テストを実行して失敗することを確認
+# 既存設定
+index_dir = ".rag"
+default_top_k = 10
+default_search_mode = "hybrid"
 
-✅ **Phase Complete**
+# コンテンツ抽出設定
+extraction_mode = "entry"
+extraction_max_chars = 5000
+extraction_include_summary = true
+extraction_include_raw = true
 
-### Green Phase: 最小実装と成功確認
-- [ ] `src/index/diff.rs` を新規作成
-  ```rust
-  pub struct IncrementalDiff {
-      pub added: Vec<Document>,
-      pub modified: Vec<Document>,
-      pub removed: Vec<String>,
-      pub unchanged: Vec<String>,
-  }
+# LLM要約設定
+summarization_enabled = true
+summarization_model = "cerebras/llama-3.3-70b"
+summarization_max_tokens = 500
+summarization_temperature = 0.3
 
-  impl IncrementalDiff {
-      pub fn compute(
-          new_docs: Vec<Document>,
-          existing_index: &IndexMetadata,
-      ) -> Self { ... }
-  }
-  ```
-- [ ] `src/index/mod.rs` に `mod diff;` を追加
-- [ ] テストを実行して成功することを確認
+# OpenRouterプロバイダー設定
+provider_order = ["Cerebras", "Together"]
+provider_allow_fallbacks = true
+# provider_only = ["Cerebras"]  # 特定プロバイダーのみ許可
+# provider_ignore = ["OpenAI"]  # 特定プロバイダーを除外
+# provider_sort = "price"       # 価格順でソート
+```
 
-✅ **Phase Complete**
+**環境変数対応:**
 
-### Refactor Phase: 品質改善と継続成功確認
-- [ ] エラーハンドリングの強化
-- [ ] Edge Case（空リスト、全削除など）への対応確認
-- [ ] テストを実行し、継続して成功することを確認
-
-✅ **Phase Complete**
-
----
-
-## Process 3: IndexMetadata の拡張
-
-### Red Phase: テスト作成と失敗確認
-- [ ] テストファイル `tests/test_index_metadata.rs` を作成
-  - `schema_version` フィールドが存在すること
-  - `doc_hashes: HashMap<String, String>` が存在すること
-  - メタデータの読み書きが正しく動作すること
-- [ ] テストを実行して失敗することを確認
-
-✅ **Phase Complete**
-
-### Green Phase: 最小実装と成功確認
-- [ ] `src/index/builder.rs` の `IndexMetadata` を拡張
-  ```rust
-  pub struct IndexMetadata {
-      // 既存フィールド...
-      pub schema_version: String,  // "2.0"
-      pub doc_hashes: HashMap<String, String>,  // doc_id -> content_hash
-  }
-  ```
-- [ ] 既存の metadata.json との互換性チェックロジックを実装
-  - `schema_version` が "1.0" 以下 → フルリビルド
-- [ ] テストを実行して成功することを確認
-
-✅ **Phase Complete**
-
-### Refactor Phase: 品質改善と継続成功確認
-- [ ] デフォルト値の確認
-- [ ] シリアライゼーション/デシリアライゼーションの検証
-- [ ] テストを実行し、継続して成功することを確認
-
-✅ **Phase Complete**
+| 設定項目 | 環境変数 |
+|---------|---------|
+| extraction_mode | DIGRAG_EXTRACTION_MODE |
+| extraction_max_chars | DIGRAG_EXTRACTION_MAX_CHARS |
+| summarization_enabled | DIGRAG_SUMMARIZATION_ENABLED |
+| summarization_model | DIGRAG_SUMMARIZATION_MODEL |
+| provider_order | DIGRAG_PROVIDER_ORDER (カンマ区切り) |
+| provider_allow_fallbacks | DIGRAG_PROVIDER_ALLOW_FALLBACKS |
 
 ---
 
-## Process 4: Docstore/VectorIndex の削除機能実装
+### Process 2: 抽出エンジン基本構造
 
-### Red Phase: テスト作成と失敗確認
-- [ ] テストファイル `tests/test_docstore_remove.rs` を作成
-  - `remove(doc_id)` で指定 ID のドキュメントが削除されること
-  - `remove_batch(doc_ids)` で複数削除が正しく動作すること
-  - 存在しない ID の削除でも問題が生じないこと
-- [ ] テストファイル `tests/test_vector_index_remove.rs` を作成
-  - `remove(doc_id)` でベクトルが削除されること
-  - `remove_batch(doc_ids)` で複数削除が正しく動作すること
-- [ ] テストを実行して失敗することを確認
+**`src/extract/mod.rs`:**
 
-✅ **Phase Complete**
+```rust
+pub mod changelog;
+pub mod summarizer;
 
-### Green Phase: 最小実装と成功確認
-- [ ] `src/index/docstore.rs` に以下を追加
-  ```rust
-  pub fn remove(&mut self, doc_id: &str) {
-      self.documents.remove(doc_id);
-  }
+/// 抽出戦略
+pub enum ExtractionStrategy {
+    /// 先頭N文字（従来互換）
+    Head(usize),
+    /// changelogエントリ単位
+    ChangelogEntry,
+    /// 全文
+    Full,
+    /// 正規表現パターン（将来拡張）
+    Pattern { start: Regex, end: Option<Regex> },
+}
 
-  pub fn remove_batch(&mut self, doc_ids: Vec<String>) {
-      for doc_id in doc_ids {
-          self.documents.remove(&doc_id);
-      }
-  }
-  ```
-- [ ] `src/index/vector.rs` に以下を追加
-  ```rust
-  pub fn remove(&mut self, doc_id: &str) { ... }
-  pub fn remove_batch(&mut self, doc_ids: Vec<String>) { ... }
-  ```
-- [ ] テストを実行して成功することを確認
+/// トランケーション設定
+pub struct TruncationConfig {
+    pub max_chars: Option<usize>,
+    pub max_lines: Option<usize>,
+    pub max_sections: Option<usize>,
+}
 
-✅ **Phase Complete**
+/// 抽出結果
+pub struct ExtractedContent {
+    pub text: String,
+    pub truncated: bool,
+    pub stats: ContentStats,
+}
 
-### Refactor Phase: 品質改善と継続成功確認
-- [ ] エラーハンドリング強化
-- [ ] Batch削除の効率化
-- [ ] テストを実行し、継続して成功することを確認
+pub struct ContentStats {
+    pub total_chars: usize,
+    pub total_lines: usize,
+    pub extracted_chars: usize,
+}
 
-✅ **Phase Complete**
+/// コンテンツ抽出器
+pub struct ContentExtractor {
+    strategy: ExtractionStrategy,
+    truncation: TruncationConfig,
+}
 
----
-
-## Process 5: IndexBuilder のインクリメンタルビルド実装
-
-### Red Phase: テスト作成と失敗確認
-- [ ] テストファイル `tests/test_incremental_build.rs` を作成
-  - フルビルド → インクリメンタルビルド の流れが正しく動作すること
-  - added/modified ドキュメントのみ embedding が生成されること
-  - removed ドキュメントがインデックスから削除されること
-  - unchanged ドキュメントは変更されないこと
-- [ ] テストを実行して失敗することを確認
-
-✅ **Phase Complete**
-
-### Green Phase: 最小実装と成功確認
-- [ ] `src/index/builder.rs` に以下を追加
-  ```rust
-  pub async fn build_incremental(
-      &mut self,
-      documents: Vec<Document>,
-      existing_metadata: &IndexMetadata,
-      embedding_model: &str,
-  ) -> Result<IndexMetadata, BuildError> {
-      // IncrementalDiff を計算
-      // added/modified のみ embedding 生成
-      // removed を docstore/vector から削除
-      // metadata を更新して返す
-  }
-
-  pub fn load_existing_index(output_dir: &Path) -> Result<IndexMetadata> {
-      // metadata.json を読み込み
-      // スキーマバージョン確認
-  }
-  ```
-- [ ] テストを実行して成功することを確認
-
-✅ **Phase Complete**
-
-### Refactor Phase: 品質改善と継続成功確認
-- [ ] エラーハンドリング強化
-- [ ] 既存インデックス読み込みロジックの安定性向上
-- [ ] テストを実行し、継続して成功することを確認
-
-✅ **Phase Complete**
+impl ContentExtractor {
+    pub fn new(strategy: ExtractionStrategy, truncation: TruncationConfig) -> Self;
+    pub fn extract(&self, full_text: &str) -> ExtractedContent;
+}
+```
 
 ---
 
-## Process 6: CLI オプション追加
+### Process 3: changelogエントリ抽出器
 
-### Red Phase: テスト作成と失敗確認
-- [ ] テストファイル `tests/test_cli_incremental.rs` を作成
-  - `--incremental` フラグが認識されること
-  - `--force` フラグでフルリビルドが強制されること
-  - フラグなしの場合は既存動作を保持すること
-- [ ] テストを実行して失敗することを確認
+**`src/extract/changelog.rs`:**
 
-✅ **Phase Complete**
+```rust
+/// changelogエントリ抽出器
+pub struct ChangelogEntryExtractor {
+    /// エントリヘッダーパターン: ^\\* .+ \\d{4}-\\d{2}-\\d{2}
+    entry_pattern: Regex,
+    truncation: TruncationConfig,
+}
 
-### Green Phase: 最小実装と成功確認
-- [ ] `src/main.rs` の build コマンド定義に以下を追加
-  ```rust
-  #[arg(long)]
-  incremental: bool,
+impl ChangelogEntryExtractor {
+    /// 指定タイトルを含むエントリを抽出
+    pub fn extract_by_title(&self, text: &str, title: &str) -> Option<ExtractedContent>;
 
-  #[arg(long)]
-  force: bool,  // --incremental でもフルリビルド
-  ```
-- [ ] build コマンドハンドラーに条件分岐を追加
-  - `incremental && !force` → インクリメンタルビルド
-  - その他 → フルビルド
-- [ ] テストを実行して成功することを確認
+    /// 全エントリをパースしてリスト化
+    pub fn parse_entries(&self, text: &str) -> Vec<ChangelogEntry>;
+}
 
-✅ **Phase Complete**
+pub struct ChangelogEntry {
+    pub title: String,
+    pub date: String,
+    pub tags: Vec<String>,
+    pub content: String,
+    pub start_offset: usize,
+    pub end_offset: usize,
+}
+```
 
-### Refactor Phase: 品質改善と継続成功確認
-- [ ] ヘルプテキストの追加
-- [ ] エラーハンドリング強化
-- [ ] テストを実行し、継続して成功することを確認
-
-✅ **Phase Complete**
-
----
-
-## Process 10: 統合テスト作成
-
-### Red Phase: テスト作成と失敗確認
-- [ ] テストファイル `tests/integration_test_incremental.rs` を作成
-  - E2E テスト: ドキュメント追加 → ビルド → 変更 → インクリメンタルビルド → 確認
-  - 出力メッセージに "Embeddings generated: X" が含まれることを確認
-
-✅ **Phase Complete**
-
-### Green Phase: テストが通過するまで実装を調整
-- [ ] E2E テストを実行して成功することを確認
-- [ ] 出力メッセージのフォーマットを確認
-  ```
-  Incremental build complete:
-    Added: X documents
-    Modified: Y documents
-    Removed: Z documents
-    Unchanged: W documents
-    Embeddings generated: A  # ← APIコスト発生は A 件のみ
-  ```
-
-✅ **Phase Complete**
-
-### Refactor Phase: テスト継続実行確認
-- [ ] すべてのテストが通過することを確認
-- [ ] 統合テストと単体テストの連携を確認
-
-✅ **Phase Complete**
+**アルゴリズム:**
+1. `^\\* `で始まる行を全てインデックス化
+2. 各エントリの範囲を特定（現在の`*`から次の`*`の前まで）
+3. タイトルマッチングでエントリを特定
+4. トランケーション適用
 
 ---
 
-## Process 200: ドキュメンテーション
+### Process 4: 要約生成器
 
-### Red Phase: ドキュメント設計
-- [ ] 文書化対象を特定
-  - インクリメンタルビルド機能の説明
-  - コンテンツハッシュの仕組み
-  - CLI 使用例
-  - 後方互換性について
-- [ ] ドキュメント構成を作成
-- [ ] **成功条件**: アウトラインが存在
+**`src/extract/summarizer.rs`:**
 
-✅ **Phase Complete**
+```rust
+/// 要約戦略
+pub enum SummarizationStrategy {
+    /// ルールベース（先頭N文字 + 統計）
+    RuleBased { preview_chars: usize },
+    /// LLMベース
+    LlmBased {
+        model: String,
+        max_tokens: usize,
+        temperature: f32,
+        provider_config: ProviderConfig,
+    },
+}
 
-### Green Phase: ドキュメント記述
-- [ ] README.md に "インクリメンタルビルド" セクションを追加
-- [ ] src/index/diff.rs に API ドキュメントコメントを追加
-- [ ] CLI 使用例を README に追加
-  ```bash
-  # 初回: フルビルド
-  digrag build --input changelog.md --output ~/.rag --with-embeddings
+/// OpenRouterプロバイダー設定
+pub struct ProviderConfig {
+    pub order: Option<Vec<String>>,
+    pub allow_fallbacks: bool,
+    pub only: Option<Vec<String>>,
+    pub ignore: Option<Vec<String>>,
+    pub sort: Option<String>,
+    pub require_parameters: bool,
+}
 
-  # 2回目以降: インクリメンタル
-  digrag build --input changelog.md --output ~/.rag --with-embeddings --incremental
+impl ProviderConfig {
+    /// APIリクエスト用のJSONオブジェクトを生成
+    pub fn to_json(&self) -> serde_json::Value;
+}
 
-  # 強制フルリビルド
-  digrag build --input changelog.md --output ~/.rag --with-embeddings --incremental --force
-  ```
-- [ ] **成功条件**: 全doc_targetsがカバー済み、Markdown構文正常
+/// 要約生成器
+pub struct ContentSummarizer {
+    strategy: SummarizationStrategy,
+    api_key: Option<String>,
+}
 
-✅ **Phase Complete**
+impl ContentSummarizer {
+    pub async fn summarize(&self, content: &ExtractedContent) -> Summary;
+}
 
-### Refactor Phase: 品質確認
-- [ ] 一貫性チェック（用語・フォーマット統一）
-- [ ] リンク検証（リンク切れなし）
-- [ ] **成功条件**: 全レポートOK
+pub struct Summary {
+    pub text: String,
+    pub method: String,  // "rule-based" | "llm"
+    pub stats: ContentStats,
+}
+```
 
-✅ **Phase Complete**
+**LLM要約APIリクエスト例:**
 
----
-
-## Process 300: OODAフィードバックループ（教訓・知見の保存）
-
-### Red Phase: フィードバック収集設計
-
-**Observe（観察）**
-- [ ] 実装過程で発生した問題・課題を収集
-- [ ] テスト結果から得られた知見を記録
-- [ ] コードレビューのフィードバックを整理
-
-**Orient（方向付け）**
-- [ ] 収集した情報をカテゴリ別に分類
-  - Technical: Rust での ハッシュ計算、インデックス管理
-  - Process: TDD プロセスの有効性、テスト設計
-  - Antipattern: 避けるべきパターン
-  - Best Practice: 推奨パターン
-- [ ] **成功条件**: 収集対象が特定され、分類基準が明確
-
-✅ **Phase Complete**
-
-### Green Phase: 教訓・知見の永続化
-
-**Decide（決心）**
-- [ ] 保存すべき教訓・知見を選定
-- [ ] 各項目の保存先を決定
-
-**Act（行動）**
-- [ ] コードに関する知見をMarkdownで記録
-- [ ] 関連するコード箇所にコメントを追加（必要に応じて）
-- [ ] **成功条件**: 全教訓がstigmergyに保存済み
-
-✅ **Phase Complete**
-
-### Refactor Phase: フィードバック品質改善
-
-**Feedback Loop**
-- [ ] 保存した教訓の品質を検証
-- [ ] メタ学習: OODAプロセス自体の改善点を記録
-
-**Cross-Feedback**
-- [ ] 他のProcess（100, 200）との連携を確認
-- [ ] **成功条件**: 教訓がstigmergyで検索可能
-
-✅ **Phase Complete**
+```rust
+let request_body = json!({
+    "model": "cerebras/llama-3.3-70b",
+    "messages": [
+        {"role": "system", "content": "以下のテキストを簡潔に要約してください。"},
+        {"role": "user", "content": content}
+    ],
+    "max_tokens": 500,
+    "temperature": 0.3,
+    "provider": {
+        "order": ["Cerebras", "Together"],
+        "allow_fallbacks": true
+    }
+});
+```
 
 ---
 
-# Management
+### Process 7: MCPツール拡張
 
-## Blockers
+**`src/main.rs` - QueryMemosParams拡張:**
 
-| ID | Description | Status | Resolution |
-|----|-------------|--------|-----------|
-| | No blockers yet | - | - |
+```rust
+#[derive(Debug, Deserialize, JsonSchema)]
+struct QueryMemosParams {
+    query: String,
+    #[serde(default = "default_top_k")]
+    top_k: usize,
+    tag_filter: Option<String>,
+    #[serde(default = "default_mode")]
+    mode: String,
 
-## Lessons
+    // 新規パラメータ
+    /// コンテンツ抽出モード: "snippet", "entry", "full"
+    extraction_mode: Option<String>,
+    /// 最大文字数制限
+    max_chars: Option<usize>,
+    /// 要約を含めるか
+    include_summary: Option<bool>,
+    /// 生データを含めるか
+    include_raw: Option<bool>,
+    /// LLM要約を使用するか
+    use_llm_summary: Option<bool>,
+}
+```
 
-| ID | Insight | Severity | Applied |
-|----|---------|----------|---------|
-| | To be filled during implementation | - | ☐ |
+**出力形式:**
 
-## Feedback Log
+```
+Found 2 results for 'Claude Code':
 
-| Date | Type | Content | Status |
-|------|------|---------|--------|
-| | | | |
+1. [score: 0.9234] Claude Code / hookタイミング
+   Date: 2025-12-27
+   Tags: [memo, dev]
 
-## Completion Checklist
-- [ ] すべてのProcess完了
-- [ ] すべてのテスト合格
-- [ ] コードレビュー完了
-- [ ] ドキュメント更新完了
-- [ ] マージ可能な状態
+   ## Summary (rule-based)
+   hookタイミングに関する調査結果。pre-commit時の挙動について...
+   [Stats: 1234文字, 45行, 抽出: 1000文字]
+
+   ## Content
+   * Claude Code / hookタイミング 2025-12-27 15:30:00 [memo]:[dev]:
+   ・pre-commit hookのタイミング調査
+   ・git add実行後、commit前に発火
+   ...
+   [truncated: 5000/12345 chars]
+
+2. [score: 0.8765] ...
+```
 
 ---
 
-<!--
-Process番号規則
-- 1-9: 機能実装
-- 10-49: テスト拡充
-- 50-99: フォローアップ
-- 100-199: 品質向上（リファクタリング）
-- 200-299: ドキュメンテーション
-- 300+: OODAフィードバックループ（教訓・知見保存）
--->
+## Management
+
+### ブロッカー
+- なし
+
+### レッスン
+- OpenRouterのプロバイダー設定は`provider`オブジェクトで柔軟にルーティング可能
+- モデル指定は`provider/model`形式で統一
+
+### フィードバックログ
+| 日時 | 内容 |
+|------|------|
+| 2025-12-28 | 初期設計完了 |
+| 2025-12-28 | 設定ファイル対応追加 |
+| 2025-12-28 | LLM要約設定追加 |
+| 2025-12-28 | OpenRouterプロバイダー設定追加 |
+
+### 完了チェックリスト
+- [ ] 全Processの実装完了
+- [ ] 単体テスト作成・パス
+- [ ] 統合テスト作成・パス
+- [ ] config.toml設定例をREADMEに追記
+- [ ] コミット・PR作成
 
