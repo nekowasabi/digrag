@@ -95,6 +95,56 @@ digrag search "project ideas" --index-dir ~/.digrag/index --mode hybrid
 digrag search "similar concepts" --index-dir ~/.digrag/index --mode semantic
 ```
 
+## Configuration
+
+digrag uses a TOML configuration file for persistent settings. Initialize with:
+
+```bash
+digrag init
+```
+
+Configuration file location:
+- Linux/macOS: `~/.config/digrag/config.toml`
+- Windows: `%APPDATA%\digrag\config.toml`
+
+### Example Configuration
+
+```toml
+# Basic settings
+index_dir = ".rag"
+default_top_k = 10
+default_search_mode = "bm25"  # bm25, semantic, or hybrid
+
+# API key (can also use OPENROUTER_API_KEY env var)
+openrouter_api_key = "sk-or-v1-..."
+
+# Content extraction settings
+extraction_mode = "snippet"  # snippet, entry, or full
+extraction_max_chars = 5000
+extraction_include_summary = true
+extraction_include_raw = true
+
+# LLM summarization (uses OpenRouter API)
+summarization_enabled = false
+summarization_model = "cerebras/llama-3.3-70b"
+summarization_max_tokens = 500
+summarization_temperature = 0.3
+
+# Provider preferences (optional)
+provider_order = ["Cerebras", "Together"]
+provider_allow_fallbacks = true
+```
+
+### Environment Variables
+
+| Variable | Description | Priority |
+|----------|-------------|----------|
+| `OPENROUTER_API_KEY` | OpenRouter API key | Fallback if not in config |
+| `DIGRAG_INDEX_DIR` | Default index directory | Overrides config |
+| `DIGRAG_SEARCH_MODE` | Default search mode | Overrides config |
+| `DIGRAG_TOP_K` | Default result count | Overrides config |
+| `DIGRAG_SUMMARIZATION_ENABLED` | Enable LLM summarization | Overrides config |
+
 ## MCP Setup
 
 ### Claude Code
