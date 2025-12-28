@@ -55,6 +55,7 @@ fn collect_markdown_files(dir: &Path) -> Vec<PathBuf> {
 #[derive(Clone)]
 struct DigragMcpServer {
     searcher: Arc<Searcher>,
+    config: Arc<AppConfig>,
 }
 
 /// Request parameters for query_memos tool
@@ -68,14 +69,14 @@ struct QueryMemosParams {
     top_k: usize,
     /// Optional tag filter
     tag_filter: Option<String>,
-    /// Search mode: "bm25", "semantic", or "hybrid" (default: "bm25")
-    #[serde(default = "default_mode")]
-    mode: String,
+    /// Search mode: "bm25", "semantic", or "hybrid" (default from config.toml)
+    #[serde(default)]
+    mode: Option<String>,
 
     // Content extraction parameters (Process 7)
-    /// Extraction mode: "snippet" (default, first 150 chars), "entry" (changelog entry), "full"
-    #[serde(default = "default_extraction_mode")]
-    extraction_mode: String,
+    /// Extraction mode: "snippet", "entry", or "full" (default from config.toml)
+    #[serde(default)]
+    extraction_mode: Option<String>,
     /// Maximum characters to extract (default: 5000)
     #[serde(default = "default_max_chars")]
     max_chars: usize,
@@ -87,19 +88,12 @@ struct QueryMemosParams {
     include_raw: bool,
     /// Use LLM for summarization (default: false, uses rule-based)
     #[serde(default)]
+    #[allow(dead_code)]
     use_llm_summary: bool,
 }
 
 fn default_top_k() -> usize {
     10
-}
-
-fn default_mode() -> String {
-    "bm25".to_string()
-}
-
-fn default_extraction_mode() -> String {
-    "snippet".to_string()
 }
 
 fn default_max_chars() -> usize {
@@ -124,18 +118,23 @@ fn default_limit() -> usize {
 
 #[tool(tool_box)]
 impl DigragMcpServer {
-    fn new(index_dir: String) -> Result<Self> {
-        // Check if API key is available for semantic search
-        let searcher = if let Ok(api_key) = std::env::var("OPENROUTER_API_KEY") {
-            tracing::info!("OPENROUTER_API_KEY found, enabling semantic search");
+    fn new(index_dir: String, config: AppConfig) -> Result<Self> {
+        // Check if API key is available for semantic search (config takes priority)
+        let searcher = if let Some(api_key) = config.openrouter_api_key() {
+            tracing::info!("OpenRouter API key found in config, enabling semantic search");
+            let embedding_client = digrag::embedding::OpenRouterEmbedding::new(api_key);
+            Searcher::with_embedding_client(&index_dir, embedding_client)?
+        } else if let Ok(api_key) = std::env::var("OPENROUTER_API_KEY") {
+            tracing::info!("OPENROUTER_API_KEY found in env, enabling semantic search");
             let embedding_client = digrag::embedding::OpenRouterEmbedding::new(api_key);
             Searcher::with_embedding_client(&index_dir, embedding_client)?
         } else {
-            tracing::info!("OPENROUTER_API_KEY not set, semantic search disabled");
+            tracing::info!("No API key configured, semantic search disabled");
             Searcher::new(&index_dir)?
         };
         Ok(Self {
             searcher: Arc::new(searcher),
+            config: Arc::new(config),
         })
     }
 
@@ -145,7 +144,12 @@ impl DigragMcpServer {
         use digrag::extract::{ContentExtractor, ExtractionStrategy, TruncationConfig};
         use digrag::extract::summarizer::ContentSummarizer;
 
-        let search_mode = match params.mode.as_str() {
+        // Get effective mode from params or config (config.toml takes priority over hardcoded defaults)
+        let effective_mode = params.mode
+            .as_deref()
+            .unwrap_or_else(|| self.config.default_search_mode());
+
+        let search_mode = match effective_mode {
             "semantic" => SearchMode::Semantic,
             "hybrid" => SearchMode::Hybrid,
             _ => SearchMode::Bm25,
@@ -170,8 +174,13 @@ impl DigragMcpServer {
             output.push_str("  digrag build --input <file> --output <dir> --with-embeddings\n\n");
         }
 
+        // Get effective extraction mode from params or config
+        let effective_extraction_mode = params.extraction_mode
+            .as_deref()
+            .unwrap_or_else(|| self.config.extraction_mode());
+
         // Determine extraction strategy based on mode
-        let extraction_strategy = match params.extraction_mode.as_str() {
+        let extraction_strategy = match effective_extraction_mode {
             "entry" => ExtractionStrategy::ChangelogEntry,
             "full" => ExtractionStrategy::Full,
             _ => ExtractionStrategy::Head(150), // snippet mode (default)
@@ -184,7 +193,7 @@ impl DigragMcpServer {
         };
 
         let extractor = ContentExtractor::new(extraction_strategy, truncation);
-        let summarizer = ContentSummarizer::rule_based(200);
+        let summarizer = ContentSummarizer::from_config(&self.config);
 
         for (i, result) in results.iter().enumerate() {
             if let Some(doc) = self.searcher.docstore().get(&result.doc_id) {
@@ -198,7 +207,7 @@ impl DigragMcpServer {
                 ));
 
                 // Extract content based on mode
-                if params.extraction_mode == "snippet" {
+                if effective_extraction_mode == "snippet" {
                     // Legacy snippet mode - just show first 150 chars
                     output.push_str(&format!(
                         "   {}\n\n",
@@ -245,7 +254,7 @@ impl DigragMcpServer {
                         ));
                     }
 
-                    output.push_str("\n");
+                    output.push('\n');
                 }
             }
         }
@@ -457,12 +466,19 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Commands::Serve { index_dir } => {
+            // Load application configuration
+            let app_config = load_app_config();
+
             let resolved_index_dir = resolve_path(&index_dir);
             tracing::info!("Starting MCP server with index directory: {}", resolved_index_dir);
             eprintln!("digrag MCP server starting... (index_dir: {})", resolved_index_dir);
 
-            // Create MCP server with searcher
-            let server = DigragMcpServer::new(resolved_index_dir)?;
+            if app_config.summarization_enabled() {
+                eprintln!("LLM summarization enabled (model: {})", app_config.summarization_model());
+            }
+
+            // Create MCP server with searcher and config
+            let server = DigragMcpServer::new(resolved_index_dir, app_config)?;
             eprintln!("Index loaded. Starting MCP stdio transport...");
 
             // Serve via stdio transport
@@ -760,7 +776,8 @@ mod tests {
         let params: QueryMemosParams = serde_json::from_str("{}").expect("Empty params should work");
         assert_eq!(params.query, "");
         assert_eq!(params.top_k, 10);
-        assert_eq!(params.mode, "bm25");
+        assert!(params.mode.is_none()); // Now None, will use config default
+        assert!(params.extraction_mode.is_none()); // Now None, will use config default
         assert!(params.tag_filter.is_none());
     }
 
@@ -769,5 +786,17 @@ mod tests {
         let params: QueryMemosParams = serde_json::from_str(r#"{"query":"test"}"#).unwrap();
         assert_eq!(params.query, "test");
         assert_eq!(params.top_k, 10);
+    }
+
+    #[test]
+    fn test_query_memos_params_with_mode() {
+        let params: QueryMemosParams = serde_json::from_str(r#"{"query":"test","mode":"hybrid"}"#).unwrap();
+        assert_eq!(params.mode, Some("hybrid".to_string()));
+    }
+
+    #[test]
+    fn test_query_memos_params_with_extraction_mode() {
+        let params: QueryMemosParams = serde_json::from_str(r#"{"query":"test","extraction_mode":"entry"}"#).unwrap();
+        assert_eq!(params.extraction_mode, Some("entry".to_string()));
     }
 }
