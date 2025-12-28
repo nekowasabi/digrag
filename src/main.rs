@@ -71,6 +71,23 @@ struct QueryMemosParams {
     /// Search mode: "bm25", "semantic", or "hybrid" (default: "bm25")
     #[serde(default = "default_mode")]
     mode: String,
+
+    // Content extraction parameters (Process 7)
+    /// Extraction mode: "snippet" (default, first 150 chars), "entry" (changelog entry), "full"
+    #[serde(default = "default_extraction_mode")]
+    extraction_mode: String,
+    /// Maximum characters to extract (default: 5000)
+    #[serde(default = "default_max_chars")]
+    max_chars: usize,
+    /// Include summary in response (default: true)
+    #[serde(default = "default_true")]
+    include_summary: bool,
+    /// Include raw content in response (default: true)
+    #[serde(default = "default_true")]
+    include_raw: bool,
+    /// Use LLM for summarization (default: false, uses rule-based)
+    #[serde(default)]
+    use_llm_summary: bool,
 }
 
 fn default_top_k() -> usize {
@@ -79,6 +96,18 @@ fn default_top_k() -> usize {
 
 fn default_mode() -> String {
     "bm25".to_string()
+}
+
+fn default_extraction_mode() -> String {
+    "snippet".to_string()
+}
+
+fn default_max_chars() -> usize {
+    5000
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// Request parameters for get_recent_memos tool
@@ -111,8 +140,11 @@ impl DigragMcpServer {
     }
 
     /// Search memos by query with optional filters
-    #[tool(description = "Search changelog memos using BM25 or semantic search")]
+    #[tool(description = "Search changelog memos using BM25 or semantic search. Supports content extraction modes: 'snippet' (first 150 chars), 'entry' (full changelog entry), 'full' (entire content with truncation).")]
     fn query_memos(&self, #[tool(aggr)] params: QueryMemosParams) -> Result<CallToolResult, rmcp::Error> {
+        use digrag::extract::{ContentExtractor, ExtractionStrategy, TruncationConfig};
+        use digrag::extract::summarizer::ContentSummarizer;
+
         let search_mode = match params.mode.as_str() {
             "semantic" => SearchMode::Semantic,
             "hybrid" => SearchMode::Hybrid,
@@ -137,17 +169,84 @@ impl DigragMcpServer {
             output.push_str("To enable semantic search, rebuild the index with embeddings using:\n");
             output.push_str("  digrag build --input <file> --output <dir> --with-embeddings\n\n");
         }
+
+        // Determine extraction strategy based on mode
+        let extraction_strategy = match params.extraction_mode.as_str() {
+            "entry" => ExtractionStrategy::ChangelogEntry,
+            "full" => ExtractionStrategy::Full,
+            _ => ExtractionStrategy::Head(150), // snippet mode (default)
+        };
+
+        let truncation = TruncationConfig {
+            max_chars: Some(params.max_chars),
+            max_lines: None,
+            max_sections: None,
+        };
+
+        let extractor = ContentExtractor::new(extraction_strategy, truncation);
+        let summarizer = ContentSummarizer::rule_based(200);
+
         for (i, result) in results.iter().enumerate() {
             if let Some(doc) = self.searcher.docstore().get(&result.doc_id) {
                 output.push_str(&format!(
-                    "{}. [score: {:.4}] {}\n   Date: {}\n   Tags: {:?}\n   {}\n\n",
+                    "{}. [score: {:.4}] {}\n   Date: {}\n   Tags: {:?}\n",
                     i + 1,
                     result.score,
                     doc.title(),
                     doc.date().format("%Y-%m-%d"),
                     doc.tags(),
-                    doc.text.chars().take(150).collect::<String>()
                 ));
+
+                // Extract content based on mode
+                if params.extraction_mode == "snippet" {
+                    // Legacy snippet mode - just show first 150 chars
+                    output.push_str(&format!(
+                        "   {}\n\n",
+                        doc.text.chars().take(150).collect::<String>()
+                    ));
+                } else {
+                    // entry or full mode - use extraction engine
+                    let extracted = extractor.extract(&doc.text);
+
+                    // Add summary if requested
+                    if params.include_summary {
+                        let rt = tokio::runtime::Handle::try_current();
+                        let summary = match rt {
+                            Ok(handle) => {
+                                tokio::task::block_in_place(|| {
+                                    handle.block_on(summarizer.summarize(&extracted))
+                                })
+                            }
+                            Err(_) => {
+                                let rt = tokio::runtime::Runtime::new().unwrap();
+                                rt.block_on(summarizer.summarize(&extracted))
+                            }
+                        };
+
+                        output.push_str(&format!(
+                            "\n   ## Summary ({})\n   {}\n",
+                            summary.method,
+                            summary.text.lines().map(|l| format!("   {}", l)).collect::<Vec<_>>().join("\n")
+                        ));
+                    }
+
+                    // Add raw content if requested
+                    if params.include_raw {
+                        let truncation_info = if extracted.truncated {
+                            format!(" [truncated: {}/{} chars]", extracted.stats.extracted_chars, extracted.stats.total_chars)
+                        } else {
+                            String::new()
+                        };
+
+                        output.push_str(&format!(
+                            "\n   ## Content{}\n   {}\n",
+                            truncation_info,
+                            extracted.text.lines().map(|l| format!("   {}", l)).collect::<Vec<_>>().join("\n")
+                        ));
+                    }
+
+                    output.push_str("\n");
+                }
             }
         }
 

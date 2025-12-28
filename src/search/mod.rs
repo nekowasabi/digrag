@@ -10,6 +10,23 @@ pub use searcher::Searcher;
 
 use serde::{Deserialize, Serialize};
 
+/// Extracted content with summary
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtractedResult {
+    /// Summary text (rule-based or LLM generated)
+    pub summary: Option<String>,
+    /// Summarization method: "rule-based" or "llm"
+    pub summary_method: Option<String>,
+    /// Raw extracted content
+    pub raw_content: Option<String>,
+    /// Whether content was truncated
+    pub truncated: bool,
+    /// Total characters in original
+    pub total_chars: usize,
+    /// Characters actually extracted
+    pub extracted_chars: usize,
+}
+
 /// Search result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResult {
@@ -21,6 +38,9 @@ pub struct SearchResult {
     pub title: Option<String>,
     /// Document snippet (optional, for display)
     pub snippet: Option<String>,
+    /// Extracted content with optional summary (for entry/full modes)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extracted: Option<ExtractedResult>,
 }
 
 impl SearchResult {
@@ -31,6 +51,7 @@ impl SearchResult {
             score,
             title: None,
             snippet: None,
+            extracted: None,
         }
     }
 
@@ -41,7 +62,14 @@ impl SearchResult {
             score,
             title: Some(title),
             snippet: Some(snippet),
+            extracted: None,
         }
+    }
+
+    /// Add extracted content to the result
+    pub fn with_extracted(mut self, extracted: ExtractedResult) -> Self {
+        self.extracted = Some(extracted);
+        self
     }
 }
 
