@@ -2,9 +2,9 @@
 //!
 //! Benchmarks for the different search modes.
 
+use criterion::{criterion_group, criterion_main, Criterion};
 use digrag::config::{SearchConfig, SearchMode};
 use digrag::search::Searcher;
-use criterion::{criterion_group, criterion_main, Criterion};
 use std::path::PathBuf;
 
 /// Get the path to the .rag directory with indices

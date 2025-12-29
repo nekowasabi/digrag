@@ -19,8 +19,12 @@ fn test_metadata_has_schema_version() {
 fn test_metadata_has_doc_hashes() {
     let mut metadata = IndexMetadata::new(10, Some("model".to_string()));
 
-    metadata.doc_hashes.insert("doc1".to_string(), "hash1".to_string());
-    metadata.doc_hashes.insert("doc2".to_string(), "hash2".to_string());
+    metadata
+        .doc_hashes
+        .insert("doc1".to_string(), "hash1".to_string());
+    metadata
+        .doc_hashes
+        .insert("doc2".to_string(), "hash2".to_string());
 
     assert_eq!(metadata.doc_hashes.len(), 2);
     assert_eq!(metadata.doc_hashes.get("doc1"), Some(&"hash1".to_string()));
@@ -30,14 +34,19 @@ fn test_metadata_has_doc_hashes() {
 #[test]
 fn test_metadata_serialization() {
     let mut metadata = IndexMetadata::new(5, Some("model".to_string()));
-    metadata.doc_hashes.insert("doc1".to_string(), "abc123".to_string());
+    metadata
+        .doc_hashes
+        .insert("doc1".to_string(), "abc123".to_string());
 
     let json = serde_json::to_string(&metadata).unwrap();
     let deserialized: IndexMetadata = serde_json::from_str(&json).unwrap();
 
     assert_eq!(deserialized.doc_count, 5);
     assert_eq!(deserialized.schema_version, "2.0");
-    assert_eq!(deserialized.doc_hashes.get("doc1"), Some(&"abc123".to_string()));
+    assert_eq!(
+        deserialized.doc_hashes.get("doc1"),
+        Some(&"abc123".to_string())
+    );
 }
 
 /// Test: IndexMetadata save/load from file
@@ -47,7 +56,9 @@ fn test_metadata_save_load() {
     let path = dir.path().join("metadata.json");
 
     let mut metadata = IndexMetadata::new(3, Some("test-model".to_string()));
-    metadata.doc_hashes.insert("id1".to_string(), "hash1".to_string());
+    metadata
+        .doc_hashes
+        .insert("id1".to_string(), "hash1".to_string());
 
     metadata.save_to_file(&path).unwrap();
 
@@ -137,7 +148,9 @@ fn test_update_doc_hash() {
 #[test]
 fn test_remove_doc_hash() {
     let mut metadata = IndexMetadata::new(0, None);
-    metadata.doc_hashes.insert("doc1".to_string(), "hash1".to_string());
+    metadata
+        .doc_hashes
+        .insert("doc1".to_string(), "hash1".to_string());
 
     metadata.remove_doc_hash("doc1");
     assert!(!metadata.doc_hashes.contains_key("doc1"));
@@ -147,7 +160,9 @@ fn test_remove_doc_hash() {
 #[test]
 fn test_get_doc_hash() {
     let mut metadata = IndexMetadata::new(0, None);
-    metadata.doc_hashes.insert("doc1".to_string(), "hash1".to_string());
+    metadata
+        .doc_hashes
+        .insert("doc1".to_string(), "hash1".to_string());
 
     assert_eq!(metadata.get_doc_hash("doc1"), Some(&"hash1".to_string()));
     assert_eq!(metadata.get_doc_hash("doc2"), None);

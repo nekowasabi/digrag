@@ -1,10 +1,10 @@
 //! digrag: Command-line interface for the changelog search MCP server
 
 use anyhow::Result;
-use digrag::config::{SearchConfig, SearchMode, path_resolver, app_config::AppConfig};
-use digrag::index::{IndexBuilder, IncrementalDiff};
-use digrag::search::Searcher;
 use clap::{ArgAction, Parser, Subcommand};
+use digrag::config::{app_config::AppConfig, path_resolver, SearchConfig, SearchMode};
+use digrag::index::{IncrementalDiff, IndexBuilder};
+use digrag::search::Searcher;
 use rmcp::{
     model::{CallToolResult, Content, ServerCapabilities, ServerInfo},
     schemars, tool, ServerHandler, ServiceExt,
@@ -40,9 +40,7 @@ fn collect_markdown_files(dir: &Path) -> Vec<PathBuf> {
             !matches!(name.as_ref(), "node_modules" | ".git" | "target" | ".rag")
         })
         .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path().is_file() && e.path().extension().is_some_and(|ext| ext == "md")
-        })
+        .filter(|e| e.path().is_file() && e.path().extension().is_some_and(|ext| ext == "md"))
         .map(|e| e.path().to_path_buf())
         .collect()
 }
@@ -139,13 +137,19 @@ impl DigragMcpServer {
     }
 
     /// Search memos by query with optional filters
-    #[tool(description = "Search changelog memos using BM25 or semantic search. Supports content extraction modes: 'snippet' (first 150 chars), 'entry' (full changelog entry), 'full' (entire content with truncation).")]
-    fn query_memos(&self, #[tool(aggr)] params: QueryMemosParams) -> Result<CallToolResult, rmcp::Error> {
-        use digrag::extract::{ContentExtractor, ExtractionStrategy, TruncationConfig};
+    #[tool(
+        description = "Search changelog memos using BM25 or semantic search. Supports content extraction modes: 'snippet' (first 150 chars), 'entry' (full changelog entry), 'full' (entire content with truncation)."
+    )]
+    fn query_memos(
+        &self,
+        #[tool(aggr)] params: QueryMemosParams,
+    ) -> Result<CallToolResult, rmcp::Error> {
         use digrag::extract::summarizer::ContentSummarizer;
+        use digrag::extract::{ContentExtractor, ExtractionStrategy, TruncationConfig};
 
         // Get effective mode from params or config (config.toml takes priority over hardcoded defaults)
-        let effective_mode = params.mode
+        let effective_mode = params
+            .mode
             .as_deref()
             .unwrap_or_else(|| self.config.default_search_mode());
 
@@ -160,22 +164,32 @@ impl DigragMcpServer {
             .with_top_k(params.top_k)
             .with_tag_filter(params.tag_filter);
 
-        let results = self.searcher.search(&params.query, &config)
+        let results = self
+            .searcher
+            .search(&params.query, &config)
             .map_err(|e| rmcp::Error::internal_error(e.to_string(), None))?;
 
-        let mut output = format!("Found {} results for '{}':\n\n", results.len(), params.query);
+        let mut output = format!(
+            "Found {} results for '{}':\n\n",
+            results.len(),
+            params.query
+        );
 
         // Add warning if semantic/hybrid search was requested but no vector index
         if (search_mode == SearchMode::Semantic || search_mode == SearchMode::Hybrid)
             && !self.searcher.has_vector_index()
         {
-            output.push_str("Note: Vector index is not available. Semantic search requires embeddings.\n");
-            output.push_str("To enable semantic search, rebuild the index with embeddings using:\n");
+            output.push_str(
+                "Note: Vector index is not available. Semantic search requires embeddings.\n",
+            );
+            output
+                .push_str("To enable semantic search, rebuild the index with embeddings using:\n");
             output.push_str("  digrag build --input <file> --output <dir> --with-embeddings\n\n");
         }
 
         // Get effective extraction mode from params or config
-        let effective_extraction_mode = params.extraction_mode
+        let effective_extraction_mode = params
+            .extraction_mode
             .as_deref()
             .unwrap_or_else(|| self.config.extraction_mode());
 
@@ -221,11 +235,9 @@ impl DigragMcpServer {
                     if params.include_summary {
                         let rt = tokio::runtime::Handle::try_current();
                         let summary = match rt {
-                            Ok(handle) => {
-                                tokio::task::block_in_place(|| {
-                                    handle.block_on(summarizer.summarize(&extracted))
-                                })
-                            }
+                            Ok(handle) => tokio::task::block_in_place(|| {
+                                handle.block_on(summarizer.summarize(&extracted))
+                            }),
                             Err(_) => {
                                 let rt = tokio::runtime::Runtime::new().unwrap();
                                 rt.block_on(summarizer.summarize(&extracted))
@@ -235,14 +247,22 @@ impl DigragMcpServer {
                         output.push_str(&format!(
                             "\n   ## Summary ({})\n   {}\n",
                             summary.method,
-                            summary.text.lines().map(|l| format!("   {}", l)).collect::<Vec<_>>().join("\n")
+                            summary
+                                .text
+                                .lines()
+                                .map(|l| format!("   {}", l))
+                                .collect::<Vec<_>>()
+                                .join("\n")
                         ));
                     }
 
                     // Add raw content if requested
                     if params.include_raw {
                         let truncation_info = if extracted.truncated {
-                            format!(" [truncated: {}/{} chars]", extracted.stats.extracted_chars, extracted.stats.total_chars)
+                            format!(
+                                " [truncated: {}/{} chars]",
+                                extracted.stats.extracted_chars, extracted.stats.total_chars
+                            )
                         } else {
                             String::new()
                         };
@@ -250,7 +270,12 @@ impl DigragMcpServer {
                         output.push_str(&format!(
                             "\n   ## Content{}\n   {}\n",
                             truncation_info,
-                            extracted.text.lines().map(|l| format!("   {}", l)).collect::<Vec<_>>().join("\n")
+                            extracted
+                                .text
+                                .lines()
+                                .map(|l| format!("   {}", l))
+                                .collect::<Vec<_>>()
+                                .join("\n")
                         ));
                     }
 
@@ -278,7 +303,10 @@ impl DigragMcpServer {
 
     /// Get recent memos
     #[tool(description = "Get the most recent changelog memos")]
-    fn get_recent_memos(&self, #[tool(aggr)] params: GetRecentMemosParams) -> Result<CallToolResult, rmcp::Error> {
+    fn get_recent_memos(
+        &self,
+        #[tool(aggr)] params: GetRecentMemosParams,
+    ) -> Result<CallToolResult, rmcp::Error> {
         let memos = self.searcher.get_recent_memos(params.limit);
         let mut output = format!("Recent {} memos:\n\n", memos.len());
 
@@ -301,10 +329,10 @@ impl DigragMcpServer {
 impl ServerHandler for DigragMcpServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
-            instructions: Some("Changelog memo search server with BM25 and semantic search capabilities".into()),
-            capabilities: ServerCapabilities::builder()
-                .enable_tools()
-                .build(),
+            instructions: Some(
+                "Changelog memo search server with BM25 and semantic search capabilities".into(),
+            ),
+            capabilities: ServerCapabilities::builder().enable_tools().build(),
             ..Default::default()
         }
     }
@@ -437,32 +465,35 @@ async fn main() -> Result<()> {
         Commands::Init { force } => {
             let config_dir = path_resolver::get_config_dir();
             let config_path = config_dir.join("config.toml");
-            
+
             eprintln!("Initializing digrag configuration...");
             eprintln!("Config directory: {}", config_dir.display());
-            
+
             // Create config directory
             if !config_dir.exists() {
                 std::fs::create_dir_all(&config_dir)?;
                 eprintln!("Created config directory");
             }
-            
+
             // Check if config already exists
             if config_path.exists() && !force {
-                eprintln!("Configuration file already exists: {}", config_path.display());
+                eprintln!(
+                    "Configuration file already exists: {}",
+                    config_path.display()
+                );
                 eprintln!("Use --force to overwrite");
                 return Ok(());
             }
-            
+
             // Create default config
             let default_config = AppConfig::default();
             let toml_content = default_config.to_toml()?;
             std::fs::write(&config_path, &toml_content)?;
-            
+
             eprintln!("Created configuration file: {}", config_path.display());
             eprintln!("\nConfiguration initialized successfully!");
             eprintln!("Edit {} to customize settings.", config_path.display());
-            
+
             Ok(())
         }
         Commands::Serve { index_dir } => {
@@ -470,11 +501,20 @@ async fn main() -> Result<()> {
             let app_config = load_app_config();
 
             let resolved_index_dir = resolve_path(&index_dir);
-            tracing::info!("Starting MCP server with index directory: {}", resolved_index_dir);
-            eprintln!("digrag MCP server starting... (index_dir: {})", resolved_index_dir);
+            tracing::info!(
+                "Starting MCP server with index directory: {}",
+                resolved_index_dir
+            );
+            eprintln!(
+                "digrag MCP server starting... (index_dir: {})",
+                resolved_index_dir
+            );
 
             if app_config.summarization_enabled() {
-                eprintln!("LLM summarization enabled (model: {})", app_config.summarization_model());
+                eprintln!(
+                    "LLM summarization enabled (model: {})",
+                    app_config.summarization_model()
+                );
             }
 
             // Create MCP server with searcher and config
@@ -505,7 +545,8 @@ async fn main() -> Result<()> {
             let output_path = Path::new(&resolved_output);
 
             // Determine build mode
-            let use_incremental = incremental && !force && IndexBuilder::has_incremental_support(output_path);
+            let use_incremental =
+                incremental && !force && IndexBuilder::has_incremental_support(output_path);
 
             if incremental && force {
                 eprintln!("Force full rebuild requested (--force overrides --incremental)");
@@ -527,8 +568,13 @@ async fn main() -> Result<()> {
 
                 // If incremental mode, compute and display diff
                 if use_incremental {
-                    if let Some(existing_metadata) = IndexBuilder::load_existing_metadata(output_path) {
-                        let diff = IncrementalDiff::compute(documents.clone(), &existing_metadata.doc_hashes);
+                    if let Some(existing_metadata) =
+                        IndexBuilder::load_existing_metadata(output_path)
+                    {
+                        let diff = IncrementalDiff::compute(
+                            documents.clone(),
+                            &existing_metadata.doc_hashes,
+                        );
                         eprintln!("\nIncremental build summary:");
                         eprintln!("  Added: {} documents", diff.added_count());
                         eprintln!("  Modified: {} documents", diff.modified_count());
@@ -544,16 +590,19 @@ async fn main() -> Result<()> {
                 }
 
                 if with_embeddings {
-                    let api_key = std::env::var("OPENROUTER_API_KEY")
-                        .map_err(|_| anyhow::anyhow!("OPENROUTER_API_KEY environment variable not set"))?;
+                    let api_key = std::env::var("OPENROUTER_API_KEY").map_err(|_| {
+                        anyhow::anyhow!("OPENROUTER_API_KEY environment variable not set")
+                    })?;
                     let builder = IndexBuilder::with_embeddings(api_key);
-                    builder.build_from_documents_with_embeddings(
-                        documents,
-                        Path::new(&resolved_output),
-                        |step, total, msg| {
-                            eprintln!("[{}/{}] {}", step, total, msg);
-                        },
-                    ).await?;
+                    builder
+                        .build_from_documents_with_embeddings(
+                            documents,
+                            Path::new(&resolved_output),
+                            |step, total, msg| {
+                                eprintln!("[{}/{}] {}", step, total, msg);
+                            },
+                        )
+                        .await?;
                 } else {
                     let builder = IndexBuilder::new();
                     builder.build_from_documents_with_progress(
@@ -579,7 +628,11 @@ async fn main() -> Result<()> {
                 let path = Path::new(input_path_str);
                 if path.is_dir() {
                     let md_files = collect_markdown_files(path);
-                    eprintln!("  Found {} markdown files in directory: {}", md_files.len(), input_path_str);
+                    eprintln!(
+                        "  Found {} markdown files in directory: {}",
+                        md_files.len(),
+                        input_path_str
+                    );
                     for md_file in md_files {
                         expanded_inputs.push(md_file.to_string_lossy().to_string());
                     }
@@ -589,7 +642,11 @@ async fn main() -> Result<()> {
             }
             let resolved_inputs = expanded_inputs;
 
-            eprintln!("Building indices from {} input(s) to {}", resolved_inputs.len(), resolved_output);
+            eprintln!(
+                "Building indices from {} input(s) to {}",
+                resolved_inputs.len(),
+                resolved_output
+            );
             for (i, path) in resolved_inputs.iter().enumerate() {
                 eprintln!("  Input {}: {}", i + 1, path);
             }
@@ -607,7 +664,10 @@ async fn main() -> Result<()> {
             // If incremental mode, compute and display diff
             if use_incremental {
                 if let Some(existing_metadata) = IndexBuilder::load_existing_metadata(output_path) {
-                    let diff = IncrementalDiff::compute(all_documents.clone(), &existing_metadata.doc_hashes);
+                    let diff = IncrementalDiff::compute(
+                        all_documents.clone(),
+                        &existing_metadata.doc_hashes,
+                    );
                     eprintln!("\nIncremental build summary:");
                     eprintln!("  Added: {} documents", diff.added_count());
                     eprintln!("  Modified: {} documents", diff.modified_count());
@@ -630,13 +690,15 @@ async fn main() -> Result<()> {
                 eprintln!("Embedding generation enabled (using OpenRouter API)");
 
                 let builder = IndexBuilder::with_embeddings(api_key);
-                builder.build_from_documents_with_embeddings(
-                    all_documents,
-                    output_path,
-                    |step, total, msg| {
-                        eprintln!("[{}/{}] {}", step, total, msg);
-                    },
-                ).await?;
+                builder
+                    .build_from_documents_with_embeddings(
+                        all_documents,
+                        output_path,
+                        |step, total, msg| {
+                            eprintln!("[{}/{}] {}", step, total, msg);
+                        },
+                    )
+                    .await?;
             } else {
                 let builder = IndexBuilder::new();
                 builder.build_from_documents_with_progress(
@@ -662,11 +724,11 @@ async fn main() -> Result<()> {
             // Load config and apply CLI overrides
             let app_config = load_app_config();
 
-            let resolved_index_dir = resolve_path(
-                &index_dir.unwrap_or_else(|| app_config.index_dir().to_string())
-            );
+            let resolved_index_dir =
+                resolve_path(&index_dir.unwrap_or_else(|| app_config.index_dir().to_string()));
             let effective_top_k = top_k.unwrap_or_else(|| app_config.default_top_k());
-            let effective_mode = mode.unwrap_or_else(|| app_config.default_search_mode().to_string());
+            let effective_mode =
+                mode.unwrap_or_else(|| app_config.default_search_mode().to_string());
 
             let search_mode = match effective_mode.as_str() {
                 "bm25" => SearchMode::Bm25,
@@ -773,7 +835,8 @@ mod tests {
     #[test]
     fn test_query_memos_params_empty() {
         // Test that empty JSON object can be deserialized (fixes "missing field query" error)
-        let params: QueryMemosParams = serde_json::from_str("{}").expect("Empty params should work");
+        let params: QueryMemosParams =
+            serde_json::from_str("{}").expect("Empty params should work");
         assert_eq!(params.query, "");
         assert_eq!(params.top_k, 10);
         assert!(params.mode.is_none()); // Now None, will use config default
@@ -790,13 +853,15 @@ mod tests {
 
     #[test]
     fn test_query_memos_params_with_mode() {
-        let params: QueryMemosParams = serde_json::from_str(r#"{"query":"test","mode":"hybrid"}"#).unwrap();
+        let params: QueryMemosParams =
+            serde_json::from_str(r#"{"query":"test","mode":"hybrid"}"#).unwrap();
         assert_eq!(params.mode, Some("hybrid".to_string()));
     }
 
     #[test]
     fn test_query_memos_params_with_extraction_mode() {
-        let params: QueryMemosParams = serde_json::from_str(r#"{"query":"test","extraction_mode":"entry"}"#).unwrap();
+        let params: QueryMemosParams =
+            serde_json::from_str(r#"{"query":"test","extraction_mode":"entry"}"#).unwrap();
         assert_eq!(params.extraction_mode, Some("entry".to_string()));
     }
 }

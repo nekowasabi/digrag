@@ -6,7 +6,7 @@
 //! 3. Relative paths should resolve from current directory
 //! 4. Non-existent paths should return appropriate errors
 
-use digrag::config::path_resolver::{expand_home, resolve_path, get_config_dir, get_data_dir};
+use digrag::config::path_resolver::{expand_home, get_config_dir, get_data_dir, resolve_path};
 use tempfile::TempDir;
 
 #[test]
@@ -37,15 +37,15 @@ fn test_relative_path_from_current_dir() {
     let temp_dir = TempDir::new().unwrap();
     let file_path = temp_dir.path().join("test.txt");
     std::fs::write(&file_path, "test").unwrap();
-    
+
     // Change to temp dir and resolve relative path
     let original_dir = std::env::current_dir().unwrap();
     std::env::set_current_dir(temp_dir.path()).unwrap();
-    
+
     let resolved = resolve_path("test.txt").unwrap();
     assert!(resolved.exists());
     assert!(resolved.is_absolute());
-    
+
     std::env::set_current_dir(original_dir).unwrap();
 }
 
@@ -66,7 +66,7 @@ fn test_resolve_existing_file() {
     let temp_dir = TempDir::new().unwrap();
     let file_path = temp_dir.path().join("existing.txt");
     std::fs::write(&file_path, "content").unwrap();
-    
+
     let resolved = resolve_path(file_path.to_str().unwrap()).unwrap();
     assert!(resolved.exists());
 }

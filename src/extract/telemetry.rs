@@ -231,10 +231,7 @@ impl TelemetryCollector {
         report.push_str("=== API Usage Report ===\n\n");
 
         report.push_str(&format!("Total Calls: {}\n", stats.total_calls));
-        report.push_str(&format!(
-            "Success Rate: {:.1}%\n",
-            stats.success_rate()
-        ));
+        report.push_str(&format!("Success Rate: {:.1}%\n", stats.success_rate()));
         report.push_str(&format!(
             "Successful: {} | Failed: {}\n\n",
             stats.successful_calls, stats.failed_calls
@@ -379,11 +376,7 @@ mod tests {
         let collector = TelemetryCollector::new(5);
 
         for i in 0..10 {
-            collector.record_failure(
-                ErrorCategory::Network,
-                format!("Error {}", i),
-                None,
-            );
+            collector.record_failure(ErrorCategory::Network, format!("Error {}", i), None);
         }
 
         let recent = collector.get_recent_errors(3);

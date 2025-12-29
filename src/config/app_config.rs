@@ -29,7 +29,6 @@ pub struct AppConfig {
     // =========================================================================
     // Content Extraction Settings
     // =========================================================================
-
     /// Extraction mode: "snippet" (default), "entry", or "full"
     #[serde(default = "default_extraction_mode")]
     extraction_mode: String,
@@ -49,7 +48,6 @@ pub struct AppConfig {
     // =========================================================================
     // LLM Summarization Settings
     // =========================================================================
-
     /// Enable LLM-based summarization (default: false)
     #[serde(default)]
     summarization_enabled: bool,
@@ -69,7 +67,6 @@ pub struct AppConfig {
     // =========================================================================
     // OpenRouter Provider Settings
     // =========================================================================
-
     /// Provider priority order (e.g., ["Cerebras", "Together"])
     #[serde(default)]
     provider_order: Option<Vec<String>>,
@@ -164,11 +161,11 @@ impl AppConfig {
     pub fn from_file(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .map_err(|e| anyhow!("Failed to read config file {}: {}", path.display(), e))?;
-        let config: AppConfig = toml::from_str(&content)
-            .map_err(|e| anyhow!("Failed to parse config file: {}", e))?;
+        let config: AppConfig =
+            toml::from_str(&content).map_err(|e| anyhow!("Failed to parse config file: {}", e))?;
         Ok(config)
     }
-    
+
     /// Create config from environment variables
     pub fn from_env() -> Self {
         let mut config = Self::default();
@@ -215,18 +212,17 @@ impl AppConfig {
 
         // Provider settings from env
         if let Ok(order) = std::env::var("DIGRAG_PROVIDER_ORDER") {
-            config.provider_order = Some(
-                order.split(',').map(|s| s.trim().to_string()).collect()
-            );
+            config.provider_order = Some(order.split(',').map(|s| s.trim().to_string()).collect());
         }
 
         if let Ok(fallbacks) = std::env::var("DIGRAG_PROVIDER_ALLOW_FALLBACKS") {
-            config.provider_allow_fallbacks = fallbacks.to_lowercase() == "true" || fallbacks == "1";
+            config.provider_allow_fallbacks =
+                fallbacks.to_lowercase() == "true" || fallbacks == "1";
         }
 
         config
     }
-    
+
     /// Merge with another config (other takes priority for non-default values)
     pub fn merge_with(&self, other: &Self) -> Self {
         Self {
@@ -235,7 +231,9 @@ impl AppConfig {
             } else {
                 self.index_dir.clone()
             },
-            openrouter_api_key: other.openrouter_api_key.clone()
+            openrouter_api_key: other
+                .openrouter_api_key
+                .clone()
                 .or_else(|| self.openrouter_api_key.clone()),
             default_top_k: if other.default_top_k != default_top_k() {
                 other.default_top_k
@@ -267,38 +265,57 @@ impl AppConfig {
             } else {
                 self.summarization_model.clone()
             },
-            summarization_max_tokens: if other.summarization_max_tokens != default_summarization_max_tokens() {
+            summarization_max_tokens: if other.summarization_max_tokens
+                != default_summarization_max_tokens()
+            {
                 other.summarization_max_tokens
             } else {
                 self.summarization_max_tokens
             },
-            summarization_temperature: if (other.summarization_temperature - default_summarization_temperature()).abs() > 0.001 {
+            summarization_temperature: if (other.summarization_temperature
+                - default_summarization_temperature())
+            .abs()
+                > 0.001
+            {
                 other.summarization_temperature
             } else {
                 self.summarization_temperature
             },
             // Provider settings
-            provider_order: other.provider_order.clone().or_else(|| self.provider_order.clone()),
+            provider_order: other
+                .provider_order
+                .clone()
+                .or_else(|| self.provider_order.clone()),
             provider_allow_fallbacks: other.provider_allow_fallbacks,
-            provider_only: other.provider_only.clone().or_else(|| self.provider_only.clone()),
-            provider_ignore: other.provider_ignore.clone().or_else(|| self.provider_ignore.clone()),
-            provider_sort: other.provider_sort.clone().or_else(|| self.provider_sort.clone()),
-            provider_require_parameters: other.provider_require_parameters || self.provider_require_parameters,
+            provider_only: other
+                .provider_only
+                .clone()
+                .or_else(|| self.provider_only.clone()),
+            provider_ignore: other
+                .provider_ignore
+                .clone()
+                .or_else(|| self.provider_ignore.clone()),
+            provider_sort: other
+                .provider_sort
+                .clone()
+                .or_else(|| self.provider_sort.clone()),
+            provider_require_parameters: other.provider_require_parameters
+                || self.provider_require_parameters,
         }
     }
-    
+
     /// Override index_dir
     pub fn with_index_dir(mut self, dir: &str) -> Self {
         self.index_dir = dir.to_string();
         self
     }
-    
+
     /// Override default_top_k
     pub fn with_default_top_k(mut self, k: usize) -> Self {
         self.default_top_k = k;
         self
     }
-    
+
     /// Validate configuration
     pub fn validate(&self) -> Result<()> {
         if self.default_top_k == 0 {
@@ -326,13 +343,12 @@ impl AppConfig {
 
         Ok(())
     }
-    
+
     /// Serialize to TOML string
     pub fn to_toml(&self) -> Result<String> {
-        toml::to_string_pretty(self)
-            .map_err(|e| anyhow!("Failed to serialize config: {}", e))
+        toml::to_string_pretty(self).map_err(|e| anyhow!("Failed to serialize config: {}", e))
     }
-    
+
     // Getters - Basic settings
     pub fn index_dir(&self) -> &str {
         &self.index_dir
@@ -413,7 +429,7 @@ impl AppConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_default_config() {
         let config = AppConfig::default();
@@ -421,13 +437,13 @@ mod tests {
         assert_eq!(config.default_top_k(), 10);
         assert_eq!(config.default_search_mode(), "bm25");
     }
-    
+
     #[test]
     fn test_validate_valid_config() {
         let config = AppConfig::default();
         assert!(config.validate().is_ok());
     }
-    
+
     #[test]
     fn test_validate_invalid_top_k() {
         let config = AppConfig::default().with_default_top_k(0);

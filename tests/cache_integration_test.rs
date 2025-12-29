@@ -120,7 +120,11 @@ fn test_summary_cache_cache_and_retrieve() {
         tokens_used: Some(150),
     };
 
-    cache.cache_summary("original content", "cerebras/llama-3.3-70b", summary.clone());
+    cache.cache_summary(
+        "original content",
+        "cerebras/llama-3.3-70b",
+        summary.clone(),
+    );
 
     let retrieved = cache.get_summary("original content", "cerebras/llama-3.3-70b");
     assert!(retrieved.is_some());

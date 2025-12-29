@@ -223,12 +223,21 @@ impl OpenRouterEmbedding {
                             }
                             Err(parse_err) => {
                                 // Try to parse as error response
-                                if let Ok(error_response) = serde_json::from_str::<EmbeddingErrorResponse>(&body_text) {
-                                    return Err(anyhow!("API error: {}", error_response.error.message));
+                                if let Ok(error_response) =
+                                    serde_json::from_str::<EmbeddingErrorResponse>(&body_text)
+                                {
+                                    return Err(anyhow!(
+                                        "API error: {}",
+                                        error_response.error.message
+                                    ));
                                 }
                                 // If both fail, return parsing error with body preview
                                 let preview: String = body_text.chars().take(300).collect();
-                                return Err(anyhow!("Failed to parse response: {}. Body preview: {}", parse_err, preview));
+                                return Err(anyhow!(
+                                    "Failed to parse response: {}. Body preview: {}",
+                                    parse_err,
+                                    preview
+                                ));
                             }
                         }
                     } else if status.as_u16() == 429 {
@@ -239,13 +248,23 @@ impl OpenRouterEmbedding {
                         // Try to parse error response from non-200 status
                         match resp.text().await {
                             Ok(error_text) => {
-                                if let Ok(error_response) = serde_json::from_str::<EmbeddingErrorResponse>(&error_text) {
-                                    return Err(anyhow!("API error {}: {}", status, error_response.error.message));
+                                if let Ok(error_response) =
+                                    serde_json::from_str::<EmbeddingErrorResponse>(&error_text)
+                                {
+                                    return Err(anyhow!(
+                                        "API error {}: {}",
+                                        status,
+                                        error_response.error.message
+                                    ));
                                 }
                                 return Err(anyhow!("API error {}: {}", status, error_text));
                             }
                             Err(e) => {
-                                return Err(anyhow!("API error {} (failed to read body: {})", status, e));
+                                return Err(anyhow!(
+                                    "API error {} (failed to read body: {})",
+                                    status,
+                                    e
+                                ));
                             }
                         }
                     }

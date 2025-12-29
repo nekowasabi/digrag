@@ -3,8 +3,7 @@
 //! Tests for OpenRouter API HTTP client functionality
 
 use digrag::extract::openrouter_client::{
-    ChatCompletionOptions, ChatMessage, OpenRouterClient, OpenRouterError,
-    UsageStats,
+    ChatCompletionOptions, ChatMessage, OpenRouterClient, OpenRouterError, UsageStats,
 };
 use digrag::extract::summarizer::ProviderConfig;
 use wiremock::matchers::{header, method, path};
@@ -213,12 +212,8 @@ async fn test_chat_completion_unauthorized() {
         .mount(&mock_server)
         .await;
 
-    let client = OpenRouterClient::with_config(
-        "invalid-key",
-        Some(mock_server.uri()),
-        None,
-        Some(0),
-    );
+    let client =
+        OpenRouterClient::with_config("invalid-key", Some(mock_server.uri()), None, Some(0));
 
     let result = client
         .chat_completion(
@@ -292,12 +287,7 @@ async fn test_chat_completion_model_not_found() {
         .mount(&mock_server)
         .await;
 
-    let client = OpenRouterClient::with_config(
-        "test-key",
-        Some(mock_server.uri()),
-        None,
-        Some(0),
-    );
+    let client = OpenRouterClient::with_config("test-key", Some(mock_server.uri()), None, Some(0));
 
     let result = client
         .chat_completion(
@@ -330,12 +320,7 @@ async fn test_chat_completion_api_error() {
         .mount(&mock_server)
         .await;
 
-    let client = OpenRouterClient::with_config(
-        "test-key",
-        Some(mock_server.uri()),
-        None,
-        Some(0),
-    );
+    let client = OpenRouterClient::with_config("test-key", Some(mock_server.uri()), None, Some(0));
 
     let result = client
         .chat_completion(
@@ -365,12 +350,7 @@ async fn test_chat_completion_invalid_json_response() {
         .mount(&mock_server)
         .await;
 
-    let client = OpenRouterClient::with_config(
-        "test-key",
-        Some(mock_server.uri()),
-        None,
-        Some(0),
-    );
+    let client = OpenRouterClient::with_config("test-key", Some(mock_server.uri()), None, Some(0));
 
     let result = client
         .chat_completion(
@@ -400,12 +380,7 @@ async fn test_chat_completion_empty_choices() {
         .mount(&mock_server)
         .await;
 
-    let client = OpenRouterClient::with_config(
-        "test-key",
-        Some(mock_server.uri()),
-        None,
-        Some(0),
-    );
+    let client = OpenRouterClient::with_config("test-key", Some(mock_server.uri()), None, Some(0));
 
     let result = client
         .chat_completion(
@@ -447,7 +422,9 @@ fn test_error_display_api() {
 
 #[test]
 fn test_error_display_rate_limit() {
-    let err = OpenRouterError::RateLimit { retry_after_secs: 60 };
+    let err = OpenRouterError::RateLimit {
+        retry_after_secs: 60,
+    };
     assert!(err.to_string().contains("Rate limit"));
     assert!(err.to_string().contains("60"));
 }

@@ -183,12 +183,7 @@ mod tests {
     #[test]
     fn test_category_empty_title() {
         let date = Utc.with_ymd_and_hms(2025, 1, 15, 10, 0, 0).unwrap();
-        let doc = Document::new(
-            "".to_string(),
-            date,
-            vec![],
-            "Content".to_string(),
-        );
+        let doc = Document::new("".to_string(), date, vec![], "Content".to_string());
 
         assert_eq!(doc.category(), None);
     }

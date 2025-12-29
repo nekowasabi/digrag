@@ -3,7 +3,7 @@
 //! Tests for content extraction engine basic structure
 
 use digrag::extract::{
-    ContentExtractor, ExtractionStrategy, TruncationConfig, ExtractedContent, ContentStats
+    ContentExtractor, ContentStats, ExtractedContent, ExtractionStrategy, TruncationConfig,
 };
 
 // =============================================================================
@@ -96,10 +96,8 @@ fn test_extracted_content_truncated() {
 
 #[test]
 fn test_content_extractor_new_head() {
-    let _extractor = ContentExtractor::new(
-        ExtractionStrategy::Head(150),
-        TruncationConfig::default(),
-    );
+    let _extractor =
+        ContentExtractor::new(ExtractionStrategy::Head(150), TruncationConfig::default());
     // Should compile and create successfully
 }
 
@@ -107,7 +105,11 @@ fn test_content_extractor_new_head() {
 fn test_content_extractor_extract_head() {
     let extractor = ContentExtractor::new(
         ExtractionStrategy::Head(10),
-        TruncationConfig { max_chars: Some(10), max_lines: None, max_sections: None },
+        TruncationConfig {
+            max_chars: Some(10),
+            max_lines: None,
+            max_sections: None,
+        },
     );
 
     let result = extractor.extract("Hello, World! This is a test.");
@@ -121,7 +123,11 @@ fn test_content_extractor_extract_head() {
 fn test_content_extractor_extract_full_no_truncation() {
     let extractor = ContentExtractor::new(
         ExtractionStrategy::Full,
-        TruncationConfig { max_chars: Some(1000), max_lines: None, max_sections: None },
+        TruncationConfig {
+            max_chars: Some(1000),
+            max_lines: None,
+            max_sections: None,
+        },
     );
 
     let input = "Short text";
@@ -134,7 +140,11 @@ fn test_content_extractor_extract_full_no_truncation() {
 fn test_content_extractor_extract_full_with_truncation() {
     let extractor = ContentExtractor::new(
         ExtractionStrategy::Full,
-        TruncationConfig { max_chars: Some(5), max_lines: None, max_sections: None },
+        TruncationConfig {
+            max_chars: Some(5),
+            max_lines: None,
+            max_sections: None,
+        },
     );
 
     let result = extractor.extract("Hello, World!");
@@ -144,10 +154,7 @@ fn test_content_extractor_extract_full_with_truncation() {
 
 #[test]
 fn test_content_extractor_line_counting() {
-    let extractor = ContentExtractor::new(
-        ExtractionStrategy::Full,
-        TruncationConfig::default(),
-    );
+    let extractor = ContentExtractor::new(ExtractionStrategy::Full, TruncationConfig::default());
 
     let input = "Line 1\nLine 2\nLine 3";
     let result = extractor.extract(input);

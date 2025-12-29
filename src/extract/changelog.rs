@@ -5,16 +5,14 @@
 //!
 //! Each entry starts with `* ` and continues until the next `* ` line.
 
-use regex::Regex;
 use once_cell::sync::Lazy;
+use regex::Regex;
 
 use super::{ContentStats, ExtractedContent, TruncationConfig};
 
 /// Regex pattern for changelog entry header
 /// Matches: * Title YYYY-MM-DD or * Title YYYY-MM-DD HH:MM:SS [tags]:
-static ENTRY_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^\* .+ \d{4}-\d{2}-\d{2}").unwrap()
-});
+static ENTRY_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\* .+ \d{4}-\d{2}-\d{2}").unwrap());
 
 /// Parsed changelog entry
 #[derive(Debug, Clone)]
@@ -74,12 +72,9 @@ impl ChangelogEntryExtractor {
 
         // Handle last entry
         if let (Some(start_offset), Some(header)) = (current_start, current_header) {
-            if let Some(entry) = self.parse_single_entry(
-                header,
-                &text[start_offset..],
-                start_offset,
-                text.len(),
-            ) {
+            if let Some(entry) =
+                self.parse_single_entry(header, &text[start_offset..], start_offset, text.len())
+            {
                 entries.push(entry);
             }
         }

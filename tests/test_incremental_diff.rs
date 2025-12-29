@@ -55,11 +55,11 @@ fn test_modified_document_classified_correctly() {
     // Since content hash determines ID, we need to use with_id to simulate modification
     let date = Utc.with_ymd_and_hms(2025, 1, 15, 10, 0, 0).unwrap();
     let modified = Document::with_id(
-        original.id.clone(),  // Same ID
+        original.id.clone(), // Same ID
         "Title".to_string(),
         date,
         vec![],
-        "Modified content".to_string(),  // Different content
+        "Modified content".to_string(), // Different content
     );
 
     let diff = IncrementalDiff::compute(vec![modified.clone()], &existing_hashes);
@@ -216,7 +216,10 @@ fn test_needs_embedding() {
         "Changed".to_string(),
     );
 
-    let diff = IncrementalDiff::compute(vec![unchanged, modified.clone(), new_doc.clone()], &existing_hashes);
+    let diff = IncrementalDiff::compute(
+        vec![unchanged, modified.clone(), new_doc.clone()],
+        &existing_hashes,
+    );
 
     let needs_embedding = diff.needs_embedding();
     assert_eq!(needs_embedding.len(), 2);

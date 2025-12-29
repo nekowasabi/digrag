@@ -165,7 +165,11 @@ impl Searcher {
     }
 
     /// Semantic search with pre-computed query vector (for testing or cached queries)
-    pub fn search_semantic_with_vector(&self, query_vec: &[f32], top_k: usize) -> Result<Vec<SearchResult>> {
+    pub fn search_semantic_with_vector(
+        &self,
+        query_vec: &[f32],
+        top_k: usize,
+    ) -> Result<Vec<SearchResult>> {
         if self.vector_index.is_empty() {
             return Ok(Vec::new());
         }

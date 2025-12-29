@@ -93,8 +93,7 @@ impl Docstore {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read docstore from {:?}", path))?;
 
-        let store = serde_json::from_str(&content)
-            .with_context(|| "Failed to parse docstore")?;
+        let store = serde_json::from_str(&content).with_context(|| "Failed to parse docstore")?;
         Ok(store)
     }
 

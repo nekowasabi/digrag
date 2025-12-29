@@ -25,9 +25,7 @@ static ENGLISH_TOKEN_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"[A-Za-z][A-Za-z0-9]*").expect("Invalid regex"));
 
 /// Compiled regex for extracting pure numeric sequences
-static NUMERIC_TOKEN_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\d+").expect("Invalid regex"));
-
+static NUMERIC_TOKEN_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\d+").expect("Invalid regex"));
 
 /// Japanese text tokenizer using Lindera
 pub struct JapaneseTokenizer {

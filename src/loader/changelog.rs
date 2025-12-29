@@ -112,7 +112,12 @@ impl ChangelogLoader {
         let text = content_lines.join("\n").trim().to_string();
 
         // Use content-based ID for incremental build support
-        Some(Document::with_content_id(title.to_string(), date, tags, text))
+        Some(Document::with_content_id(
+            title.to_string(),
+            date,
+            tags,
+            text,
+        ))
     }
 }
 

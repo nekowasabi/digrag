@@ -203,7 +203,14 @@ impl IndexBuilder {
         // Step 3: Build vector index (if embedding client available)
         let vector_index = if let Some(client) = &self.embedding_client {
             let total_batches = doc_count.div_ceil(BATCH_SIZE);
-            progress(3, 5, &format!("Generating embeddings ({} documents in {} batches)...", doc_count, total_batches));
+            progress(
+                3,
+                5,
+                &format!(
+                    "Generating embeddings ({} documents in {} batches)...",
+                    doc_count, total_batches
+                ),
+            );
 
             let mut index = VectorIndex::new(1536);
             let texts: Vec<String> = documents.iter().map(create_embedding_text).collect();
@@ -295,7 +302,14 @@ impl IndexBuilder {
         // Step 4: Build vector index (if embedding client available)
         let vector_index = if let Some(client) = &self.embedding_client {
             let total_batches = doc_count.div_ceil(BATCH_SIZE);
-            progress(4, 6, &format!("Generating embeddings ({} documents in {} batches)...", doc_count, total_batches));
+            progress(
+                4,
+                6,
+                &format!(
+                    "Generating embeddings ({} documents in {} batches)...",
+                    doc_count, total_batches
+                ),
+            );
 
             let mut index = VectorIndex::new(1536); // OpenAI embedding dimension
             let texts: Vec<String> = documents.iter().map(create_embedding_text).collect();

@@ -96,10 +96,7 @@ impl IncrementalDiff {
 
     /// Get all documents that need new embeddings
     pub fn needs_embedding(&self) -> Vec<&Document> {
-        self.added
-            .iter()
-            .chain(self.modified.iter())
-            .collect()
+        self.added.iter().chain(self.modified.iter()).collect()
     }
 
     /// Check if there are any changes

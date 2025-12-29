@@ -211,8 +211,8 @@ impl Bm25Index {
             .with_context(|| format!("Failed to read BM25 index from {:?}", path))?;
 
         // First, try to parse as JSON Value to detect format
-        let json_value: Value = serde_json::from_str(&content)
-            .with_context(|| "Failed to parse BM25 index as JSON")?;
+        let json_value: Value =
+            serde_json::from_str(&content).with_context(|| "Failed to parse BM25 index as JSON")?;
 
         // Check if this is Python format (has "corpus" key)
         if json_value.get("corpus").is_some() {
@@ -228,8 +228,8 @@ impl Bm25Index {
 
     /// Load from Python RAG format and convert to Rust format
     fn load_from_python_format(content: &str) -> Result<Self> {
-        let python_format: PythonBm25Format = serde_json::from_str(content)
-            .with_context(|| "Failed to parse Python BM25 format")?;
+        let python_format: PythonBm25Format =
+            serde_json::from_str(content).with_context(|| "Failed to parse Python BM25 format")?;
 
         let num_docs = python_format.doc_ids.len();
         let doc_ids = python_format.doc_ids;

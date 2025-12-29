@@ -74,7 +74,10 @@ pub struct ContentExtractor {
 impl ContentExtractor {
     /// Create a new content extractor
     pub fn new(strategy: ExtractionStrategy, truncation: TruncationConfig) -> Self {
-        Self { strategy, truncation }
+        Self {
+            strategy,
+            truncation,
+        }
     }
 
     /// Extract content from text using configured strategy
@@ -90,13 +93,17 @@ impl ContentExtractor {
                 // Delegate to changelog module
                 changelog::extract_current_entry(full_text, &self.truncation)
             }
-            ExtractionStrategy::Full => {
-                self.extract_full(full_text, total_chars, total_lines)
-            }
+            ExtractionStrategy::Full => self.extract_full(full_text, total_chars, total_lines),
         }
     }
 
-    fn extract_head(&self, text: &str, n: usize, total_chars: usize, total_lines: usize) -> ExtractedContent {
+    fn extract_head(
+        &self,
+        text: &str,
+        n: usize,
+        total_chars: usize,
+        total_lines: usize,
+    ) -> ExtractedContent {
         let max_chars = self.truncation.max_chars.unwrap_or(n).min(n);
         let extracted: String = text.chars().take(max_chars).collect();
         let extracted_chars = extracted.chars().count();
@@ -153,10 +160,8 @@ mod tests {
 
     #[test]
     fn test_extractor_head_basic() {
-        let extractor = ContentExtractor::new(
-            ExtractionStrategy::Head(5),
-            TruncationConfig::default(),
-        );
+        let extractor =
+            ContentExtractor::new(ExtractionStrategy::Head(5), TruncationConfig::default());
         let result = extractor.extract("Hello, World!");
         assert_eq!(result.text, "Hello");
         assert!(result.truncated);

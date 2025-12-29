@@ -24,7 +24,9 @@ fn test_load_existing_metadata_nonexistent() {
 fn test_load_existing_metadata_valid() {
     let dir = tempdir().unwrap();
     let metadata = IndexMetadata::new(5, Some("test-model".to_string()));
-    metadata.save_to_file(&dir.path().join("metadata.json")).unwrap();
+    metadata
+        .save_to_file(&dir.path().join("metadata.json"))
+        .unwrap();
 
     let loaded = IndexBuilder::load_existing_metadata(dir.path());
     assert!(loaded.is_some());
@@ -63,7 +65,9 @@ fn test_build_populates_doc_hashes() {
         create_test_doc("Title 2", "Content 2"),
     ];
 
-    builder.build_from_documents(docs.clone(), dir.path()).unwrap();
+    builder
+        .build_from_documents(docs.clone(), dir.path())
+        .unwrap();
 
     let metadata = IndexMetadata::load_from_file(&dir.path().join("metadata.json")).unwrap();
 
@@ -85,7 +89,9 @@ fn test_incremental_build_processes_only_changes() {
         create_test_doc("Doc 1", "Content 1"),
         create_test_doc("Doc 2", "Content 2"),
     ];
-    builder.build_from_documents(initial_docs.clone(), dir.path()).unwrap();
+    builder
+        .build_from_documents(initial_docs.clone(), dir.path())
+        .unwrap();
 
     // Load existing metadata
     let existing_metadata = IndexBuilder::load_existing_metadata(dir.path()).unwrap();
@@ -116,7 +122,9 @@ fn test_incremental_build_removes_deleted() {
         create_test_doc("Doc 2", "Content 2"),
         create_test_doc("Doc 3", "Content 3"),
     ];
-    builder.build_from_documents(initial_docs.clone(), dir.path()).unwrap();
+    builder
+        .build_from_documents(initial_docs.clone(), dir.path())
+        .unwrap();
 
     // Load docstore
     let docstore = Docstore::load_from_file(&dir.path().join("docstore.json")).unwrap();
@@ -146,7 +154,9 @@ fn test_has_incremental_support() {
 
     // Create metadata with current schema
     let metadata = IndexMetadata::new(0, None);
-    metadata.save_to_file(&dir.path().join("metadata.json")).unwrap();
+    metadata
+        .save_to_file(&dir.path().join("metadata.json"))
+        .unwrap();
 
     // Now has support
     assert!(IndexBuilder::has_incremental_support(dir.path()));
@@ -158,11 +168,11 @@ fn test_metadata_updated_after_build() {
     let dir = tempdir().unwrap();
     let builder = IndexBuilder::new();
 
-    let docs = vec![
-        create_test_doc("Doc 1", "Content 1"),
-    ];
+    let docs = vec![create_test_doc("Doc 1", "Content 1")];
 
-    builder.build_from_documents(docs.clone(), dir.path()).unwrap();
+    builder
+        .build_from_documents(docs.clone(), dir.path())
+        .unwrap();
 
     let metadata = IndexMetadata::load_from_file(&dir.path().join("metadata.json")).unwrap();
     assert_eq!(metadata.doc_count, 1);
@@ -176,7 +186,8 @@ fn test_metadata_updated_after_build() {
 
     builder.build_from_documents(more_docs, dir.path()).unwrap();
 
-    let updated_metadata = IndexMetadata::load_from_file(&dir.path().join("metadata.json")).unwrap();
+    let updated_metadata =
+        IndexMetadata::load_from_file(&dir.path().join("metadata.json")).unwrap();
     assert_eq!(updated_metadata.doc_count, 2);
     assert_eq!(updated_metadata.doc_hashes.len(), 2);
 }

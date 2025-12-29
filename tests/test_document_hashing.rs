@@ -14,7 +14,10 @@ fn test_compute_content_hash_returns_16_char_hex() {
     assert_eq!(hash.len(), 16, "Hash should be 16 characters");
 
     // Hash should be valid hex
-    assert!(hash.chars().all(|c| c.is_ascii_hexdigit()), "Hash should be valid hex");
+    assert!(
+        hash.chars().all(|c| c.is_ascii_hexdigit()),
+        "Hash should be valid hex"
+    );
 }
 
 /// Test: Same content produces same hash (reproducibility)
@@ -32,7 +35,10 @@ fn test_different_content_produces_different_hash() {
     let hash1 = Document::compute_content_hash("Title A", "Content A");
     let hash2 = Document::compute_content_hash("Title B", "Content B");
 
-    assert_ne!(hash1, hash2, "Different content should produce different hash");
+    assert_ne!(
+        hash1, hash2,
+        "Different content should produce different hash"
+    );
 }
 
 /// Test: Different title produces different hash
@@ -41,7 +47,10 @@ fn test_different_title_produces_different_hash() {
     let hash1 = Document::compute_content_hash("Title A", "Same Content");
     let hash2 = Document::compute_content_hash("Title B", "Same Content");
 
-    assert_ne!(hash1, hash2, "Different title should produce different hash");
+    assert_ne!(
+        hash1, hash2,
+        "Different title should produce different hash"
+    );
 }
 
 /// Test: Different text produces different hash
@@ -58,8 +67,15 @@ fn test_different_text_produces_different_hash() {
 fn test_empty_content_produces_valid_hash() {
     let hash = Document::compute_content_hash("", "");
 
-    assert_eq!(hash.len(), 16, "Empty content should still produce 16-char hash");
-    assert!(hash.chars().all(|c| c.is_ascii_hexdigit()), "Hash should be valid hex");
+    assert_eq!(
+        hash.len(),
+        16,
+        "Empty content should still produce 16-char hash"
+    );
+    assert!(
+        hash.chars().all(|c| c.is_ascii_hexdigit()),
+        "Hash should be valid hex"
+    );
 }
 
 /// Test: Metadata changes do NOT affect hash (date, tags)
@@ -78,11 +94,18 @@ fn test_metadata_does_not_affect_hash() {
     let doc2 = Document::with_content_id(
         "Test Title".to_string(),
         date2,
-        vec!["completely".to_string(), "different".to_string(), "tags".to_string()],
+        vec![
+            "completely".to_string(),
+            "different".to_string(),
+            "tags".to_string(),
+        ],
         "Test content".to_string(),
     );
 
-    assert_eq!(doc1.id, doc2.id, "Same title+text should produce same ID regardless of metadata");
+    assert_eq!(
+        doc1.id, doc2.id,
+        "Same title+text should produce same ID regardless of metadata"
+    );
 }
 
 /// Test: with_content_id constructor creates document with content-based ID
@@ -117,7 +140,10 @@ fn test_document_content_hash_method() {
     let hash = doc.content_hash();
     let expected = Document::compute_content_hash("Test Title", "Test content");
 
-    assert_eq!(hash, expected, "content_hash() should return hash of title and text");
+    assert_eq!(
+        hash, expected,
+        "content_hash() should return hash of title and text"
+    );
 }
 
 /// Test: Unicode content is handled correctly
@@ -126,6 +152,9 @@ fn test_unicode_content_hash() {
     let hash1 = Document::compute_content_hash("日本語タイトル", "日本語テキスト");
     let hash2 = Document::compute_content_hash("日本語タイトル", "日本語テキスト");
 
-    assert_eq!(hash1, hash2, "Unicode content should produce consistent hash");
+    assert_eq!(
+        hash1, hash2,
+        "Unicode content should produce consistent hash"
+    );
     assert_eq!(hash1.len(), 16, "Unicode hash should be 16 characters");
 }

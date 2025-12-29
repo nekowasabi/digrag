@@ -17,7 +17,10 @@ fn test_incremental_flag_recognized() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let combined = format!("{}{}", stdout, stderr);
 
-    assert!(combined.contains("--incremental"), "CLI should recognize --incremental flag");
+    assert!(
+        combined.contains("--incremental"),
+        "CLI should recognize --incremental flag"
+    );
 }
 
 /// Test: --force flag is recognized
@@ -32,7 +35,10 @@ fn test_force_flag_recognized() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let combined = format!("{}{}", stdout, stderr);
 
-    assert!(combined.contains("--force"), "CLI should recognize --force flag");
+    assert!(
+        combined.contains("--force"),
+        "CLI should recognize --force flag"
+    );
 }
 
 /// Test: build without flags uses full build (default behavior)
@@ -46,16 +52,26 @@ fn test_default_build_behavior() {
 
     let output = Command::new("cargo")
         .args([
-            "run", "--",
+            "run",
+            "--",
             "build",
-            "--input", test_file.to_str().unwrap(),
-            "--output", output_dir.to_str().unwrap(),
+            "--input",
+            test_file.to_str().unwrap(),
+            "--output",
+            output_dir.to_str().unwrap(),
         ])
         .output()
         .expect("Failed to execute command");
 
-    assert!(output.status.success(), "Build should succeed: {:?}", output);
-    assert!(output_dir.join("metadata.json").exists(), "Metadata should be created");
+    assert!(
+        output.status.success(),
+        "Build should succeed: {:?}",
+        output
+    );
+    assert!(
+        output_dir.join("metadata.json").exists(),
+        "Metadata should be created"
+    );
 }
 
 /// Test: build with --incremental uses incremental build when possible
@@ -70,10 +86,13 @@ fn test_incremental_build_flag() {
     // First build (full)
     let output1 = Command::new("cargo")
         .args([
-            "run", "--",
+            "run",
+            "--",
             "build",
-            "--input", test_file.to_str().unwrap(),
-            "--output", output_dir.to_str().unwrap(),
+            "--input",
+            test_file.to_str().unwrap(),
+            "--output",
+            output_dir.to_str().unwrap(),
         ])
         .output()
         .expect("Failed to execute command");
@@ -83,10 +102,13 @@ fn test_incremental_build_flag() {
     // Second build (incremental)
     let output2 = Command::new("cargo")
         .args([
-            "run", "--",
+            "run",
+            "--",
             "build",
-            "--input", test_file.to_str().unwrap(),
-            "--output", output_dir.to_str().unwrap(),
+            "--input",
+            test_file.to_str().unwrap(),
+            "--output",
+            output_dir.to_str().unwrap(),
             "--incremental",
         ])
         .output()
@@ -97,8 +119,11 @@ fn test_incremental_build_flag() {
     let stderr = String::from_utf8_lossy(&output2.stderr);
     // Should indicate incremental mode
     assert!(
-        stderr.contains("Incremental") || stderr.contains("incremental") || stderr.contains("unchanged"),
-        "Output should mention incremental build: {}", stderr
+        stderr.contains("Incremental")
+            || stderr.contains("incremental")
+            || stderr.contains("unchanged"),
+        "Output should mention incremental build: {}",
+        stderr
     );
 }
 
@@ -114,10 +139,13 @@ fn test_force_full_rebuild() {
     // First build
     let _output1 = Command::new("cargo")
         .args([
-            "run", "--",
+            "run",
+            "--",
             "build",
-            "--input", test_file.to_str().unwrap(),
-            "--output", output_dir.to_str().unwrap(),
+            "--input",
+            test_file.to_str().unwrap(),
+            "--output",
+            output_dir.to_str().unwrap(),
         ])
         .output()
         .expect("Failed to execute command");
@@ -125,10 +153,13 @@ fn test_force_full_rebuild() {
     // Force full rebuild
     let output2 = Command::new("cargo")
         .args([
-            "run", "--",
+            "run",
+            "--",
             "build",
-            "--input", test_file.to_str().unwrap(),
-            "--output", output_dir.to_str().unwrap(),
+            "--input",
+            test_file.to_str().unwrap(),
+            "--output",
+            output_dir.to_str().unwrap(),
             "--incremental",
             "--force",
         ])
@@ -140,7 +171,11 @@ fn test_force_full_rebuild() {
     let stderr = String::from_utf8_lossy(&output2.stderr);
     // Should indicate full rebuild
     assert!(
-        stderr.contains("full") || stderr.contains("Full") || stderr.contains("rebuild") || stderr.contains("force"),
-        "Output should mention full rebuild when --force is used: {}", stderr
+        stderr.contains("full")
+            || stderr.contains("Full")
+            || stderr.contains("rebuild")
+            || stderr.contains("force"),
+        "Output should mention full rebuild when --force is used: {}",
+        stderr
     );
 }

@@ -93,7 +93,12 @@ fn test_strategy_llm_based() {
     };
 
     match strategy {
-        SummarizationStrategy::LlmBased { model, max_tokens, temperature, .. } => {
+        SummarizationStrategy::LlmBased {
+            model,
+            max_tokens,
+            temperature,
+            ..
+        } => {
             assert_eq!(model, "cerebras/llama-3.3-70b");
             assert_eq!(max_tokens, 500);
             assert!((temperature - 0.3).abs() < 0.001);
@@ -134,7 +139,8 @@ async fn test_rule_based_short_content() {
 #[tokio::test]
 async fn test_rule_based_long_content() {
     let summarizer = ContentSummarizer::rule_based(20);
-    let content = create_test_content("This is a much longer piece of content that will be truncated.");
+    let content =
+        create_test_content("This is a much longer piece of content that will be truncated.");
 
     let summary = summarizer.summarize(&content).await;
 
@@ -166,7 +172,8 @@ async fn test_rule_based_preserves_stats() {
 #[tokio::test]
 async fn test_rule_based_japanese_content() {
     let summarizer = ContentSummarizer::rule_based(50);
-    let content = create_test_content("これは日本語のテストコンテンツです。要約機能のテストを行っています。");
+    let content =
+        create_test_content("これは日本語のテストコンテンツです。要約機能のテストを行っています。");
 
     let summary = summarizer.summarize(&content).await;
 
@@ -286,12 +293,8 @@ async fn test_llm_summarization_with_mock_api() {
         .await;
 
     // Create client with mock server URL
-    let client = OpenRouterClient::with_config(
-        "test-api-key",
-        Some(mock_server.uri()),
-        None,
-        Some(0),
-    );
+    let client =
+        OpenRouterClient::with_config("test-api-key", Some(mock_server.uri()), None, Some(0));
 
     let content = create_test_content("これはテスト用のコンテンツです。要約をテストします。");
 

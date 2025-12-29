@@ -31,8 +31,9 @@ impl JsonlLoader {
             }
 
             // Parse JSON
-            let doc: Document = serde_json::from_str(trimmed)
-                .with_context(|| format!("Failed to parse JSON at line {}: {}", line_number, trimmed))?;
+            let doc: Document = serde_json::from_str(trimmed).with_context(|| {
+                format!("Failed to parse JSON at line {}: {}", line_number, trimmed)
+            })?;
 
             documents.push(doc);
         }

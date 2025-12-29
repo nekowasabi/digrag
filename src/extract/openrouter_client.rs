@@ -240,10 +240,7 @@ impl OpenRouterClient {
                 Ok(response) => return Ok(response),
                 Err(OpenRouterError::RateLimit { retry_after_secs }) => {
                     // Exponential backoff with rate limit hint
-                    let wait_time = std::cmp::max(
-                        retry_after_secs,
-                        2_u64.pow(retry_count),
-                    );
+                    let wait_time = std::cmp::max(retry_after_secs, 2_u64.pow(retry_count));
                     tokio::time::sleep(Duration::from_secs(wait_time)).await;
                     retry_count += 1;
                     last_error = Some(OpenRouterError::RateLimit { retry_after_secs });

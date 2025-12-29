@@ -2,12 +2,12 @@
 //!
 //! TDD tests for semantic search implementation.
 
+use chrono::{TimeZone, Utc};
 use digrag::config::{SearchConfig, SearchMode};
 use digrag::embedding::OpenRouterEmbedding;
 use digrag::index::{Bm25Index, Docstore, VectorIndex};
 use digrag::loader::Document;
 use digrag::search::Searcher;
-use chrono::{TimeZone, Utc};
 use tempfile::tempdir;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -59,18 +59,23 @@ fn setup_test_indices(index_path: &std::path::Path) -> Docstore {
 
     // Build BM25 index from documents
     let bm25 = Bm25Index::build(&docs).unwrap();
-    bm25.save_to_file(&index_path.join("bm25_index.json")).unwrap();
+    bm25.save_to_file(&index_path.join("bm25_index.json"))
+        .unwrap();
 
     // Build vector index
     let vector_index = create_test_vector_index();
-    vector_index.save_to_file(&index_path.join("faiss_index.json")).unwrap();
+    vector_index
+        .save_to_file(&index_path.join("faiss_index.json"))
+        .unwrap();
 
     // Build docstore
     let mut docstore = Docstore::new();
     for doc in docs {
         docstore.add(doc);
     }
-    docstore.save_to_file(&index_path.join("docstore.json")).unwrap();
+    docstore
+        .save_to_file(&index_path.join("docstore.json"))
+        .unwrap();
 
     docstore
 }
@@ -84,8 +89,14 @@ fn test_vector_index_search_returns_results() {
     let results = index.search(&query_vec, 3).unwrap();
 
     assert!(!results.is_empty(), "Vector search should return results");
-    assert_eq!(results[0].doc_id, "doc1", "Most similar document should be doc1");
-    assert!(results[0].score > 0.9, "Similarity score should be high for exact match");
+    assert_eq!(
+        results[0].doc_id, "doc1",
+        "Most similar document should be doc1"
+    );
+    assert!(
+        results[0].score > 0.9,
+        "Similarity score should be high for exact match"
+    );
 }
 
 #[test]
@@ -108,7 +119,10 @@ async fn test_searcher_semantic_mode_with_vector_index() {
     setup_test_indices(index_path);
 
     let searcher = Searcher::new(index_path).unwrap();
-    assert!(searcher.has_vector_index(), "Vector index should be available");
+    assert!(
+        searcher.has_vector_index(),
+        "Vector index should be available"
+    );
 }
 
 /// Test semantic search using pre-computed vector (bypasses embedding API)
@@ -127,7 +141,10 @@ async fn test_semantic_search_with_precomputed_vector() {
     let results = searcher.search_semantic_with_vector(&query_vec, 5).unwrap();
 
     assert!(!results.is_empty(), "Semantic search should return results");
-    assert_eq!(results[0].doc_id, "doc1", "Most relevant doc should be doc1");
+    assert_eq!(
+        results[0].doc_id, "doc1",
+        "Most relevant doc should be doc1"
+    );
 }
 
 /// Test semantic search with mock embedding API
@@ -156,18 +173,24 @@ async fn test_semantic_search_with_embedding_client() {
     setup_test_indices(index_path);
 
     // Create searcher with embedding client
-    let embedding_client = OpenRouterEmbedding::with_base_url(
-        "test-api-key".to_string(),
-        mock_server.uri(),
-    );
+    let embedding_client =
+        OpenRouterEmbedding::with_base_url("test-api-key".to_string(), mock_server.uri());
 
     let searcher = Searcher::with_embedding_client(index_path, embedding_client).unwrap();
 
-    let config = SearchConfig::new().with_mode(SearchMode::Semantic).with_top_k(5);
+    let config = SearchConfig::new()
+        .with_mode(SearchMode::Semantic)
+        .with_top_k(5);
     let results = searcher.search("意志力", &config).unwrap();
 
-    assert!(!results.is_empty(), "Semantic search should return results with embedding client");
-    assert_eq!(results[0].doc_id, "doc1", "Most relevant doc should be doc1");
+    assert!(
+        !results.is_empty(),
+        "Semantic search should return results with embedding client"
+    );
+    assert_eq!(
+        results[0].doc_id, "doc1",
+        "Most relevant doc should be doc1"
+    );
 }
 
 /// Test hybrid search combines BM25 and semantic results
@@ -194,14 +217,14 @@ async fn test_hybrid_search_with_embedding_client() {
 
     setup_test_indices(index_path);
 
-    let embedding_client = OpenRouterEmbedding::with_base_url(
-        "test-api-key".to_string(),
-        mock_server.uri(),
-    );
+    let embedding_client =
+        OpenRouterEmbedding::with_base_url("test-api-key".to_string(), mock_server.uri());
 
     let searcher = Searcher::with_embedding_client(index_path, embedding_client).unwrap();
 
-    let config = SearchConfig::new().with_mode(SearchMode::Hybrid).with_top_k(5);
+    let config = SearchConfig::new()
+        .with_mode(SearchMode::Hybrid)
+        .with_top_k(5);
     let results = searcher.search("意志力", &config).unwrap();
 
     assert!(!results.is_empty(), "Hybrid search should return results");
@@ -228,10 +251,18 @@ mod vector_search_unit_tests {
         let query_vec = vec![0.5, 0.5, 0.5];
 
         let results_1 = index.search(&query_vec, 1).unwrap();
-        assert_eq!(results_1.len(), 1, "Should return only 1 result when top_k=1");
+        assert_eq!(
+            results_1.len(),
+            1,
+            "Should return only 1 result when top_k=1"
+        );
 
         let results_2 = index.search(&query_vec, 2).unwrap();
-        assert_eq!(results_2.len(), 2, "Should return only 2 results when top_k=2");
+        assert_eq!(
+            results_2.len(),
+            2,
+            "Should return only 2 results when top_k=2"
+        );
     }
 
     #[test]
@@ -241,8 +272,11 @@ mod vector_search_unit_tests {
         let results = index.search(&query_vec, 3).unwrap();
 
         for result in &results {
-            assert!(result.score >= -1.0 - 1e-5 && result.score <= 1.0 + 1e-5,
-                "Cosine similarity should be approximately in [-1, 1] range, got {}", result.score);
+            assert!(
+                result.score >= -1.0 - 1e-5 && result.score <= 1.0 + 1e-5,
+                "Cosine similarity should be approximately in [-1, 1] range, got {}",
+                result.score
+            );
         }
     }
 }

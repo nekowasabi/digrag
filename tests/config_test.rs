@@ -20,13 +20,17 @@ fn test_default_config() {
 fn test_load_from_toml() {
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("config.toml");
-    
-    std::fs::write(&config_path, r#"
+
+    std::fs::write(
+        &config_path,
+        r#"
 index_dir = "/custom/index"
 openrouter_api_key = "test-key"
 default_top_k = 20
-"#).unwrap();
-    
+"#,
+    )
+    .unwrap();
+
     let config = AppConfig::from_file(&config_path).unwrap();
     assert_eq!(config.index_dir(), "/custom/index");
     assert_eq!(config.openrouter_api_key(), Some("test-key".to_string()));
@@ -36,10 +40,10 @@ default_top_k = 20
 #[test]
 fn test_env_override() {
     std::env::set_var("DIGRAG_INDEX_DIR", "/env/index");
-    
+
     let config = AppConfig::from_env();
     assert_eq!(config.index_dir(), "/env/index");
-    
+
     std::env::remove_var("DIGRAG_INDEX_DIR");
 }
 
@@ -47,23 +51,27 @@ fn test_env_override() {
 fn test_merge_priority() {
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("config.toml");
-    
-    std::fs::write(&config_path, r#"
+
+    std::fs::write(
+        &config_path,
+        r#"
 index_dir = "/file/index"
 default_top_k = 15
-"#).unwrap();
-    
+"#,
+    )
+    .unwrap();
+
     std::env::set_var("DIGRAG_INDEX_DIR", "/env/index");
-    
+
     let file_config = AppConfig::from_file(&config_path).unwrap();
     let env_config = AppConfig::from_env();
     let merged = file_config.merge_with(&env_config);
-    
+
     // ENV should override file
     assert_eq!(merged.index_dir(), "/env/index");
     // File value should be preserved where ENV is not set
     assert_eq!(merged.default_top_k(), 15);
-    
+
     std::env::remove_var("DIGRAG_INDEX_DIR");
 }
 
@@ -71,7 +79,7 @@ default_top_k = 15
 fn test_config_with_cli_override() {
     let base_config = AppConfig::default();
     let with_override = base_config.with_index_dir("/cli/index");
-    
+
     assert_eq!(with_override.index_dir(), "/cli/index");
 }
 
@@ -86,7 +94,7 @@ fn test_config_serialization() {
     let config = AppConfig::default()
         .with_index_dir("/test/index")
         .with_default_top_k(25);
-    
+
     let toml_str = config.to_toml().unwrap();
     assert!(toml_str.contains("index_dir"));
     assert!(toml_str.contains("/test/index"));
@@ -118,13 +126,17 @@ fn test_extraction_config_from_toml() {
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
-    std::fs::write(&config_path, r#"
+    std::fs::write(
+        &config_path,
+        r#"
 index_dir = ".rag"
 extraction_mode = "entry"
 extraction_max_chars = 10000
 extraction_include_summary = true
 extraction_include_raw = false
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let config = AppConfig::from_file(&config_path).unwrap();
     assert_eq!(config.extraction_mode(), "entry");
@@ -162,13 +174,17 @@ fn test_summarization_config_from_toml() {
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
-    std::fs::write(&config_path, r#"
+    std::fs::write(
+        &config_path,
+        r#"
 index_dir = ".rag"
 summarization_enabled = true
 summarization_model = "anthropic/claude-3-haiku"
 summarization_max_tokens = 1000
 summarization_temperature = 0.5
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let config = AppConfig::from_file(&config_path).unwrap();
     assert!(config.summarization_enabled());
@@ -195,7 +211,9 @@ fn test_provider_config_from_toml() {
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
-    std::fs::write(&config_path, r#"
+    std::fs::write(
+        &config_path,
+        r#"
 index_dir = ".rag"
 provider_order = ["Cerebras", "Together"]
 provider_allow_fallbacks = false
@@ -203,10 +221,15 @@ provider_only = ["Cerebras"]
 provider_ignore = ["OpenAI"]
 provider_sort = "price"
 provider_require_parameters = true
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let config = AppConfig::from_file(&config_path).unwrap();
-    assert_eq!(config.provider_order(), Some(vec!["Cerebras".to_string(), "Together".to_string()]));
+    assert_eq!(
+        config.provider_order(),
+        Some(vec!["Cerebras".to_string(), "Together".to_string()])
+    );
     assert!(!config.provider_allow_fallbacks());
     assert_eq!(config.provider_only(), Some(vec!["Cerebras".to_string()]));
     assert_eq!(config.provider_ignore(), Some(vec!["OpenAI".to_string()]));
@@ -220,11 +243,14 @@ fn test_provider_order_env_override() {
     std::env::set_var("DIGRAG_PROVIDER_ALLOW_FALLBACKS", "false");
 
     let config = AppConfig::from_env();
-    assert_eq!(config.provider_order(), Some(vec![
-        "Cerebras".to_string(),
-        "Together".to_string(),
-        "Fireworks".to_string()
-    ]));
+    assert_eq!(
+        config.provider_order(),
+        Some(vec![
+            "Cerebras".to_string(),
+            "Together".to_string(),
+            "Fireworks".to_string()
+        ])
+    );
     assert!(!config.provider_allow_fallbacks());
 
     std::env::remove_var("DIGRAG_PROVIDER_ORDER");
@@ -238,10 +264,17 @@ fn test_validate_extraction_mode() {
 
     // 有効なモード
     for mode in &["snippet", "entry", "full"] {
-        std::fs::write(&config_path, format!(r#"
+        std::fs::write(
+            &config_path,
+            format!(
+                r#"
 index_dir = ".rag"
 extraction_mode = "{}"
-"#, mode)).unwrap();
+"#,
+                mode
+            ),
+        )
+        .unwrap();
 
         let config = AppConfig::from_file(&config_path).unwrap();
         assert!(config.validate().is_ok(), "Mode '{}' should be valid", mode);
@@ -253,10 +286,14 @@ fn test_validate_invalid_extraction_mode() {
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
-    std::fs::write(&config_path, r#"
+    std::fs::write(
+        &config_path,
+        r#"
 index_dir = ".rag"
 extraction_mode = "invalid_mode"
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let config = AppConfig::from_file(&config_path).unwrap();
     assert!(config.validate().is_err());
@@ -267,7 +304,9 @@ fn test_full_config_roundtrip() {
     let temp_dir = TempDir::new().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
-    std::fs::write(&config_path, r#"
+    std::fs::write(
+        &config_path,
+        r#"
 index_dir = "/custom/index"
 openrouter_api_key = "test-key"
 default_top_k = 20
@@ -285,7 +324,9 @@ summarization_temperature = 0.3
 
 provider_order = ["Cerebras", "Together"]
 provider_allow_fallbacks = true
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let config = AppConfig::from_file(&config_path).unwrap();
     assert!(config.validate().is_ok());

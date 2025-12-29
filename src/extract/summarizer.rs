@@ -140,11 +140,10 @@ pub struct ContentSummarizer {
 impl ContentSummarizer {
     /// Create a new content summarizer
     pub fn new(strategy: SummarizationStrategy, api_key: Option<String>) -> Self {
-        let client = api_key.as_ref().map(|key| OpenRouterClient::new(key.clone()));
-        Self {
-            strategy,
-            client,
-        }
+        let client = api_key
+            .as_ref()
+            .map(|key| OpenRouterClient::new(key.clone()));
+        Self { strategy, client }
     }
 
     /// Create a rule-based summarizer
@@ -196,7 +195,9 @@ impl ContentSummarizer {
                     api_key,
                 );
             } else {
-                warn!("Summarization enabled but no API key configured, falling back to rule-based");
+                warn!(
+                    "Summarization enabled but no API key configured, falling back to rule-based"
+                );
             }
         }
 
@@ -282,7 +283,8 @@ impl ContentSummarizer {
         temperature: f32,
         provider_config: &ProviderConfig,
     ) -> Result<Summary, Box<dyn std::error::Error + Send + Sync>> {
-        let system_prompt = "以下のテキストを簡潔に要約してください。重要なポイントを箇条書きで抽出してください。";
+        let system_prompt =
+            "以下のテキストを簡潔に要約してください。重要なポイントを箇条書きで抽出してください。";
 
         let messages = vec![
             ChatMessage::system(system_prompt),

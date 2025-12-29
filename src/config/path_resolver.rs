@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 /// Expand tilde (~) in path to home directory
 pub fn expand_home(path: &str) -> Result<PathBuf> {
     if let Some(stripped) = path.strip_prefix('~') {
-        let home = std::env::var("HOME")
-            .map_err(|_| anyhow!("HOME environment variable not set"))?;
+        let home =
+            std::env::var("HOME").map_err(|_| anyhow!("HOME environment variable not set"))?;
         if stripped.is_empty() {
             Ok(PathBuf::from(home))
         } else if stripped.starts_with('/') {
@@ -28,14 +28,14 @@ pub fn expand_home(path: &str) -> Result<PathBuf> {
 }
 
 /// Resolve a path to an absolute path
-/// 
+///
 /// Resolution order:
 /// 1. Expand ~ to home directory
 /// 2. If absolute, return as-is
 /// 3. If relative, resolve from current directory
 pub fn resolve_path(path: &str) -> Result<PathBuf> {
     let expanded = expand_home(path)?;
-    
+
     if expanded.is_absolute() {
         Ok(expanded)
     } else {
@@ -47,7 +47,7 @@ pub fn resolve_path(path: &str) -> Result<PathBuf> {
 }
 
 /// Get the XDG config directory for digrag
-/// 
+///
 /// Returns: $XDG_CONFIG_HOME/digrag or ~/.config/digrag
 pub fn get_config_dir() -> PathBuf {
     if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
@@ -60,20 +60,23 @@ pub fn get_config_dir() -> PathBuf {
 }
 
 /// Get the XDG data directory for digrag
-/// 
+///
 /// Returns: $XDG_DATA_HOME/digrag or ~/.local/share/digrag
 pub fn get_data_dir() -> PathBuf {
     if let Ok(xdg_data) = std::env::var("XDG_DATA_HOME") {
         PathBuf::from(xdg_data).join("digrag")
     } else if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".local").join("share").join("digrag")
+        PathBuf::from(home)
+            .join(".local")
+            .join("share")
+            .join("digrag")
     } else {
         PathBuf::from(".local").join("share").join("digrag")
     }
 }
 
 /// Get the XDG cache directory for digrag
-/// 
+///
 /// Returns: $XDG_CACHE_HOME/digrag or ~/.cache/digrag
 pub fn get_cache_dir() -> PathBuf {
     if let Ok(xdg_cache) = std::env::var("XDG_CACHE_HOME") {
@@ -92,9 +95,10 @@ pub fn get_default_config_path() -> PathBuf {
 
 /// Get the directory of the current executable
 pub fn get_exe_dir() -> Result<PathBuf> {
-    let exe_path = std::env::current_exe()
-        .map_err(|e| anyhow!("Failed to get executable path: {}", e))?;
-    exe_path.parent()
+    let exe_path =
+        std::env::current_exe().map_err(|e| anyhow!("Failed to get executable path: {}", e))?;
+    exe_path
+        .parent()
         .map(|p| p.to_path_buf())
         .ok_or_else(|| anyhow!("Executable has no parent directory"))
 }
@@ -102,12 +106,12 @@ pub fn get_exe_dir() -> Result<PathBuf> {
 /// Find project root by looking for .git directory
 pub fn find_project_root(start: &Path) -> Option<PathBuf> {
     let mut current = start.to_path_buf();
-    
+
     loop {
         if current.join(".git").exists() {
             return Some(current);
         }
-        
+
         if !current.pop() {
             return None;
         }
