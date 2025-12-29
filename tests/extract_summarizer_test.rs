@@ -181,9 +181,8 @@ async fn test_rule_based_japanese_content() {
 
 #[test]
 fn test_rule_based_factory() {
-    let summarizer = ContentSummarizer::rule_based(150);
+    let _summarizer = ContentSummarizer::rule_based(150);
     // Just verify it creates successfully
-    assert!(true);
 }
 
 #[test]
@@ -197,7 +196,7 @@ fn test_llm_based_factory() {
         require_parameters: false,
     };
 
-    let summarizer = ContentSummarizer::llm_based(
+    let _summarizer = ContentSummarizer::llm_based(
         "cerebras/llama-3.3-70b".to_string(),
         500,
         0.3,
@@ -205,7 +204,6 @@ fn test_llm_based_factory() {
         "test-api-key".to_string(),
     );
     // Just verify it creates successfully
-    assert!(true);
 }
 
 // =============================================================================

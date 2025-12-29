@@ -96,12 +96,11 @@ fn test_extracted_content_truncated() {
 
 #[test]
 fn test_content_extractor_new_head() {
-    let extractor = ContentExtractor::new(
+    let _extractor = ContentExtractor::new(
         ExtractionStrategy::Head(150),
         TruncationConfig::default(),
     );
-    // Should compile and create
-    assert!(true);
+    // Should compile and create successfully
 }
 
 #[test]

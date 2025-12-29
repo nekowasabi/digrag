@@ -3,11 +3,8 @@
 //! Tests for LRU cache integration with ContentSummarizer
 
 use digrag::extract::cache::{CacheStats, CachedSummary, LruCache, SummaryCache};
-use digrag::extract::summarizer::{ContentSummarizer, ProviderConfig, Summary};
 use digrag::extract::{ContentStats, ExtractedContent};
 use std::time::Duration;
-use wiremock::matchers::{header, method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
 
 // =============================================================================
 // LRU Cache Basic Tests

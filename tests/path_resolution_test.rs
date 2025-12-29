@@ -7,7 +7,6 @@
 //! 4. Non-existent paths should return appropriate errors
 
 use digrag::config::path_resolver::{expand_home, resolve_path, get_config_dir, get_data_dir};
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 #[test]

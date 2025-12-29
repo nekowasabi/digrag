@@ -4,9 +4,8 @@
 //! Red Phase: These tests should FAIL initially, then pass after Green Phase implementation
 
 use digrag::index::{IndexBuilder, VectorIndex};
-use std::path::Path;
 use tempfile::TempDir;
-use wiremock::matchers::{body_json_string, header, method, path};
+use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 /// Test 1: CLI --with-embeddings flag parsing
@@ -46,9 +45,8 @@ fn test_cli_build_with_embeddings_flag() {
     assert!(cli.is_ok(), "CLI should accept --with-embeddings flag");
 
     if let Ok(cli) = cli {
-        if let TestCommands::Build { with_embeddings, .. } = cli.command {
-            assert!(with_embeddings, "--with-embeddings should be true");
-        }
+        let TestCommands::Build { with_embeddings, .. } = cli.command;
+        assert!(with_embeddings, "--with-embeddings should be true");
     }
 }
 
@@ -169,7 +167,7 @@ async fn test_build_with_embeddings_creates_vector_index() {
     let vector_index = VectorIndex::load_from_file(&output_dir.join("faiss_index.json"))
         .expect("Failed to load vector index");
 
-    assert!(vector_index.len() > 0, "Vector index should have vectors");
+    assert!(!vector_index.is_empty(), "Vector index should have vectors");
     assert!(vector_index.dimension() > 0, "Vector index should have dimension");
 }
 
@@ -368,7 +366,7 @@ async fn test_vector_index_saved_with_embeddings() {
     assert_eq!(dimension, 1536, "Dimension should be 1536");
 
     let vectors = json["vectors"].as_array().unwrap();
-    assert!(vectors.len() > 0, "Should have at least one vector");
+    assert!(!vectors.is_empty(), "Should have at least one vector");
 }
 
 /// Test 10: Metadata includes embedding model info

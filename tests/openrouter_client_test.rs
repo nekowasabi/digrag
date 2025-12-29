@@ -3,7 +3,7 @@
 //! Tests for OpenRouter API HTTP client functionality
 
 use digrag::extract::openrouter_client::{
-    ChatCompletionOptions, ChatCompletionResponse, ChatMessage, OpenRouterClient, OpenRouterError,
+    ChatCompletionOptions, ChatMessage, OpenRouterClient, OpenRouterError,
     UsageStats,
 };
 use digrag::extract::summarizer::ProviderConfig;

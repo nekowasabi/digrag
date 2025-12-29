@@ -50,7 +50,8 @@ mod tests {
 
     #[test]
     fn test_version_exists() {
-        assert!(!VERSION.is_empty());
+        // VERSION is set at compile time and will never be empty
+        assert_ne!(VERSION, "");
     }
 
     #[test]
@@ -63,6 +64,5 @@ mod tests {
         // This test validates that the project structure is correct
         // by checking that the modules can be imported
         // The actual content of modules will be tested in their respective files
-        assert!(true, "Project structure is valid");
     }
 }

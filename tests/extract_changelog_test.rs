@@ -134,7 +134,7 @@ fn test_extract_with_truncation() {
     let text = "* Long Entry 2025-01-15 [memo]:\n" .to_owned()
         + &"A".repeat(1000);
 
-    let entries = extractor.parse_entries(&text);
+    let _entries = extractor.parse_entries(&text);
     let result = extractor.extract_by_title(&text, "Long Entry").unwrap();
 
     assert!(result.truncated);

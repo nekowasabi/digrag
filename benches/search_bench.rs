@@ -2,8 +2,8 @@
 //!
 //! Benchmarks for the different search modes.
 
-use cl_search::config::{SearchConfig, SearchMode};
-use cl_search::search::Searcher;
+use digrag::config::{SearchConfig, SearchMode};
+use digrag::search::Searcher;
 use criterion::{criterion_group, criterion_main, Criterion};
 use std::path::PathBuf;
 
@@ -38,12 +38,12 @@ fn benchmark_bm25_search(c: &mut Criterion) {
         }
     };
 
-    let test_queries = vec!["メモ", "worklog", "設定", "コマンド", "実装"];
+    const TEST_QUERIES: &[&str] = &["メモ", "worklog", "設定", "コマンド", "実装"];
 
     c.bench_function("bm25_search_throughput", |b| {
         let mut query_idx = 0;
         b.iter(|| {
-            let query = test_queries[query_idx % test_queries.len()];
+            let query = TEST_QUERIES[query_idx % TEST_QUERIES.len()];
             let config = SearchConfig::new()
                 .with_mode(SearchMode::Bm25)
                 .with_top_k(10)
@@ -70,12 +70,12 @@ fn benchmark_semantic_search(c: &mut Criterion) {
         }
     };
 
-    let test_queries = vec!["メモ", "worklog", "設定", "コマンド", "実装"];
+    const TEST_QUERIES: &[&str] = &["メモ", "worklog", "設定", "コマンド", "実装"];
 
     c.bench_function("semantic_search_throughput", |b| {
         let mut query_idx = 0;
         b.iter(|| {
-            let query = test_queries[query_idx % test_queries.len()];
+            let query = TEST_QUERIES[query_idx % TEST_QUERIES.len()];
             let config = SearchConfig::new()
                 .with_mode(SearchMode::Semantic)
                 .with_top_k(10)
@@ -102,12 +102,12 @@ fn benchmark_hybrid_search(c: &mut Criterion) {
         }
     };
 
-    let test_queries = vec!["メモ", "worklog", "設定", "コマンド", "実装"];
+    const TEST_QUERIES: &[&str] = &["メモ", "worklog", "設定", "コマンド", "実装"];
 
     c.bench_function("hybrid_search_throughput", |b| {
         let mut query_idx = 0;
         b.iter(|| {
-            let query = test_queries[query_idx % test_queries.len()];
+            let query = TEST_QUERIES[query_idx % TEST_QUERIES.len()];
             let config = SearchConfig::new()
                 .with_mode(SearchMode::Hybrid)
                 .with_top_k(10)

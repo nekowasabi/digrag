@@ -140,7 +140,7 @@ fn test_remove_doc_hash() {
     metadata.doc_hashes.insert("doc1".to_string(), "hash1".to_string());
 
     metadata.remove_doc_hash("doc1");
-    assert!(metadata.doc_hashes.get("doc1").is_none());
+    assert!(!metadata.doc_hashes.contains_key("doc1"));
 }
 
 /// Test: get_doc_hash returns hash if exists

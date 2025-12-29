@@ -49,7 +49,7 @@ fn test_python_bm25_index_can_be_loaded() {
         Ok(index) => {
             // Index should have documents
             println!("Loaded BM25 index with {} documents", index.len());
-            assert!(index.len() > 0, "BM25 index should have documents");
+            assert!(!index.is_empty(), "BM25 index should have documents");
         }
         Err(e) => {
             // Document the incompatibility for future resolution
@@ -75,7 +75,7 @@ fn test_python_docstore_can_be_loaded() {
     match result {
         Ok(docstore) => {
             println!("Loaded docstore with {} documents", docstore.len());
-            assert!(docstore.len() > 0, "Docstore should have documents");
+            assert!(!docstore.is_empty(), "Docstore should have documents");
 
             // Check that we can get documents
             let tags = docstore.get_all_tags();

@@ -3,9 +3,8 @@
 //! Process 5: TDD Red Phase - Incremental Build Tests
 
 use chrono::{TimeZone, Utc};
-use digrag::index::{Docstore, IndexBuilder, IndexMetadata, VectorIndex};
+use digrag::index::{Docstore, IndexBuilder, IndexMetadata};
 use digrag::loader::Document;
-use std::collections::HashMap;
 use tempfile::tempdir;
 
 fn create_test_doc(title: &str, text: &str) -> Document {
