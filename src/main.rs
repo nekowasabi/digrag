@@ -3,6 +3,7 @@
 use anyhow::Result;
 use clap::{ArgAction, Parser, Subcommand};
 use digrag::config::{app_config::AppConfig, path_resolver, SearchConfig, SearchMode};
+use digrag::extract::{ContentExtractor, ExtractionStrategy, TruncationConfig};
 use digrag::index::{IncrementalDiff, IndexBuilder};
 use digrag::search::Searcher;
 use rmcp::{
@@ -441,6 +442,10 @@ enum Commands {
         /// Filter by tag
         #[arg(long)]
         tag: Option<String>,
+
+        /// Extraction mode: snippet, entry, or full
+        #[arg(short = 'e', long)]
+        extraction: Option<String>,
     },
 }
 
@@ -518,7 +523,7 @@ async fn main() -> Result<()> {
             }
 
             // Create MCP server with searcher and config
-            let server = DigragMcpServer::new(resolved_index_dir, app_config)?;
+            let server = DigragMcpServer::new(resolved_index_dir.clone(), app_config)?;
             eprintln!("Index loaded. Starting MCP stdio transport...");
 
             // Serve via stdio transport
@@ -720,6 +725,7 @@ async fn main() -> Result<()> {
             top_k,
             mode,
             tag,
+            extraction,
         } => {
             // Load config and apply CLI overrides
             let app_config = load_app_config();
@@ -729,6 +735,8 @@ async fn main() -> Result<()> {
             let effective_top_k = top_k.unwrap_or_else(|| app_config.default_top_k());
             let effective_mode =
                 mode.unwrap_or_else(|| app_config.default_search_mode().to_string());
+            let effective_extraction =
+                extraction.unwrap_or_else(|| app_config.extraction_mode().to_string());
 
             let search_mode = match effective_mode.as_str() {
                 "bm25" => SearchMode::Bm25,
@@ -739,6 +747,27 @@ async fn main() -> Result<()> {
                     SearchMode::Bm25
                 }
             };
+
+            // Set up extraction strategy based on effective_extraction
+            let extraction_strategy = match effective_extraction.as_str() {
+                "entry" => ExtractionStrategy::ChangelogEntry,
+                "full" => ExtractionStrategy::Full,
+                "snippet" => ExtractionStrategy::Head(150),
+                _ => {
+                    eprintln!(
+                        "Unknown extraction mode '{}', using snippet",
+                        effective_extraction
+                    );
+                    ExtractionStrategy::Head(150)
+                }
+            };
+
+            let truncation = TruncationConfig {
+                max_chars: Some(app_config.extraction_max_chars()),
+                max_lines: None,
+                max_sections: None,
+            };
+            let extractor = ContentExtractor::new(extraction_strategy, truncation);
 
             // Create searcher with embedding client if API key is available
             let searcher = if let Some(api_key) = app_config.openrouter_api_key() {
@@ -769,8 +798,14 @@ async fn main() -> Result<()> {
                         println!("   Title: {}", doc.title());
                         println!("   Date: {}", doc.date().format("%Y-%m-%d"));
                         println!("   Tags: {:?}", doc.tags());
-                        let snippet: String = doc.text.chars().take(100).collect();
-                        println!("   {}", snippet);
+                        let extracted = extractor.extract(&doc.text);
+                        println!("   {}", extracted.text);
+                        if extracted.truncated {
+                            println!(
+                                "   [truncated: {} of {} chars shown]",
+                                extracted.stats.extracted_chars, extracted.stats.total_chars
+                            );
+                        }
                     }
                     println!();
                 }
